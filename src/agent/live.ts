@@ -246,6 +246,11 @@ export class LiveConversation {
     this.player.clear();
   }
 
+  /** Niveau instantané (RMS 0..1) de la voix en cours de lecture — synchro labiale. */
+  voiceLevel(): number {
+    return this.player.currentLevel();
+  }
+
   // --- Reprise de session (PLAN §1b) -----------------------------------------
 
   private sendMic(b64: string): void {

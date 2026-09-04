@@ -82,23 +82,30 @@ let concluding = false;
 let concludeFallback = 0;
 const CONCLUDE_FALLBACK_MS = 15000; // si le prof n'appelle pas fin_de_seance, on ferme quand même
 
-// --- Animation de la bouche pendant que le prof parle ------------------------
-let voiceLevel = 0;
-let flapTimer: number | null = null;
-function startMouthFlap(): void {
-  if (flapTimer !== null) return;
-  flapTimer = window.setInterval(() => {
-    const amp = Math.min(1, voiceLevel * 1.6);
-    const v = 0.1 + amp * 0.5 * (0.55 + Math.random() * 0.45);
-    face.setChannel('mouthOpen', v, 0.05);
-  }, 90);
+// --- Synchro labiale ---------------------------------------------------------
+//
+// La bouche suit l'ENVELOPPE de la voix réellement jouée (RMS lu sur le graphe
+// audio via un AnalyserNode, cf. voicePlayer.currentLevel), image par image. Fini
+// l'ouverture aléatoire « fait semblant » : la bouche est calée sur le son.
+let mouthRAF = 0;
+function startMouthSync(): void {
+  if (mouthRAF) return;
+  const tick = () => {
+    const lvl = live?.voiceLevel() ?? 0;
+    // RMS de parole ~0.05..0.3 après le gain de compensation → ouverture bornée.
+    // tau court (0.04 s) : la bouche colle au son sans trembler entre deux images.
+    const open = Math.min(0.72, REST_FACE.mouthOpen + lvl * 2.4);
+    face.setChannel('mouthOpen', open, 0.04);
+    mouthRAF = requestAnimationFrame(tick);
+  };
+  mouthRAF = requestAnimationFrame(tick);
 }
-function stopMouthFlap(): void {
-  if (flapTimer !== null) {
-    clearInterval(flapTimer);
-    flapTimer = null;
+function stopMouthSync(): void {
+  if (mouthRAF) {
+    cancelAnimationFrame(mouthRAF);
+    mouthRAF = 0;
   }
-  face.setChannel('mouthOpen', REST_FACE.mouthOpen, 0.14);
+  face.setChannel('mouthOpen', REST_FACE.mouthOpen, 0.12);
 }
 
 // --- Dispatcher (outils du prof → carnet / écran / visage) -------------------
@@ -145,13 +152,12 @@ if (geminiKey) {
     onSpeakingChange: (sp) => {
       tutorSpeaking = sp;
       if (sp) {
-        startMouthFlap();
+        startMouthSync();
         meter.flush(); // le prof prend la parole : on clôt le tour de l'élève
       } else {
-        stopMouthFlap();
+        stopMouthSync();
       }
     },
-    onLevel: (lvl) => (voiceLevel = lvl),
     onMicLevel: (peak, sending) => app.setMicLevel(peak, sending),
     onMicFrame: (peak) => {
       // On ne compte le temps de parole que quand le prof se TAIT : sinon sa propre

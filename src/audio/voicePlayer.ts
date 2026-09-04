@@ -39,6 +39,9 @@ export class VoicePlayer {
   private ctx: AudioContext | null = null;
   private gain: GainNode | null = null;
   private tail: AudioNode | null = null; // dernier nœud avant la sortie (gain → limiteur)
+  // Enveloppe de la voix EN COURS de lecture, pour la synchro labiale (lip-sync).
+  private analyser: AnalyserNode | null = null;
+  private levelBuf: Float32Array<ArrayBuffer> = new Float32Array(0);
   private streamDest: MediaStreamAudioDestinationNode | null = null;
   private sinkEl: HTMLAudioElement | null = null;
   private routedToElement = false; // true si la sortie passe par le <audio> (haut-parleur mobile)
@@ -54,6 +57,22 @@ export class VoicePlayer {
   /** Décale la hauteur de la voix (1 = naturelle, 1.1–1.3 = plus aiguë/bébé). */
   setPitch(factor: number): void {
     this.pitch = Math.max(0.5, Math.min(2, factor));
+  }
+
+  /**
+   * Niveau instantané (RMS 0..1) du son EN COURS de lecture — pour caler la bouche
+   * sur la voix (lip-sync). Lu sur le graphe audio via un AnalyserNode : c'est
+   * exactement le signal que le lecteur émet à cet instant, pas la crête d'un chunk
+   * déjà passé. Rend 0 quand rien ne joue (le graphe est silencieux au repos).
+   */
+  currentLevel(): number {
+    const a = this.analyser;
+    if (!a) return 0;
+    if (this.levelBuf.length !== a.fftSize) this.levelBuf = new Float32Array(a.fftSize);
+    a.getFloatTimeDomainData(this.levelBuf);
+    let sum = 0;
+    for (let i = 0; i < this.levelBuf.length; i++) sum += this.levelBuf[i] * this.levelBuf[i];
+    return Math.sqrt(sum / this.levelBuf.length);
   }
 
   /** À appeler dans un geste utilisateur pour autoriser l'audio. */
@@ -227,6 +246,7 @@ export class VoicePlayer {
     this.ctx = null;
     this.gain = null;
     this.tail = null;
+    this.analyser = null;
     this.streamDest = null;
     this.sinkEl = null;
     this.routedToElement = false;
@@ -272,7 +292,15 @@ export class VoicePlayer {
     limiter.ratio.value = 20;
     limiter.attack.value = 0.003;
     limiter.release.value = 0.1;
-    this.gain.connect(limiter);
+    // Analyseur inséré EN LIGNE (gain → analyseur → limiteur) : ainsi il est
+    // toujours « tiré » par le graphe, quel que soit le routage de sortie (<audio>
+    // ou ctx.destination), et il voit le même signal que celui envoyé au haut-parleur.
+    this.analyser = this.ctx.createAnalyser();
+    this.analyser.fftSize = 512; // ~10 ms de fenêtre : assez fin pour l'enveloppe
+    this.analyser.smoothingTimeConstant = 0; // on lisse via le tau du visage, pas ici
+    this.levelBuf = new Float32Array(this.analyser.fftSize);
+    this.gain.connect(this.analyser);
+    this.analyser.connect(limiter);
     this.tail = limiter;
 
     // Chemin direct (repli, actif par défaut). resume() bascule vers le <audio>
