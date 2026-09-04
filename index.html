@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0d1b2a" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="icon.svg" />
+    <title>Loro</title>
+  </head>
+  <body>
+    <!-- Le visage du prof, plein écran (SDF WebGL, repris de Mochi). -->
+    <canvas id="face"></canvas>
+
+    <!-- Invite affichée UNIQUEMENT quand le navigateur refuse de démarrer la voix
+         sans geste. N'importe quel contact avec l'écran réveille l'app. -->
+    <p id="wake" hidden>Touche l’écran pour parler</p>
+
+    <!-- Coquille d'interface (barre du haut, tableau, jauge, sous-titres, écrans
+         Carnet et Réglages) : peuplée par src/ui/app.ts. -->
+    <div id="app"></div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

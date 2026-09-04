@@ -1,0 +1,567 @@
+// Coquille d'interface de Loro — trois écrans, pas plus (PLAN §4) :
+//   1. Conversation : visage plein écran + jauge live + tableau + corrections +
+//      sous-titres + menu de scénario + minuteur.
+//   2. Carnet : bilan de la séance + historique (niveau, erreurs, mots, temps).
+//   3. Réglages : clé, profil, métier, voix, seuil de silence, sous-titres, export.
+//
+// L'App ne fait que du RENDU et remonte des callbacks ; main.ts tient la logique.
+
+import { el, clear, svgEl } from './dom';
+import { SCENARIOS, type ScenarioId } from '../tutor/persona';
+import { LIVE_VOICES } from '../agent/live';
+import type { LiveStatus } from '../agent/live';
+import type { KeySource } from '../agent/apiKey';
+import type { Settings, SubtitleMode } from '../settings';
+import type { Store } from '../learn/store';
+import type { SessionRecord } from '../learn/types';
+import type { BoardEntry, CorrectionCard, LiveScore, SessionSummary } from '../agent/dispatcher';
+import { aggregateErrors, reusableWords, RECUR_MIN } from '../tutor/briefing';
+
+export type Screen = 'conversation' | 'carnet' | 'reglages';
+
+export interface AppCallbacks {
+  onStartStop(): void;
+  onScenarioChange(id: ScenarioId): void;
+  onSettingsChange(patch: Partial<Settings>): void;
+  onProfileChange(id: string): void;
+  onAddProfile(name: string): void;
+  onKeyChange(key: string): void;
+  onExport(): void;
+  onImportFile(file: File): void;
+  onWordTap(word: string): void;
+  onClearNotebook(): void;
+}
+
+export interface AppDeps {
+  root: HTMLElement;
+  store: Store;
+  settings: Settings;
+  callbacks: AppCallbacks;
+  buildId: string;
+  hasKey: boolean;
+  keySource: KeySource;
+}
+
+const CEFR = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+
+export class App {
+  private readonly cb: AppCallbacks;
+  private readonly store: Store;
+  private settings: Settings;
+  private hasKey: boolean;
+  private concluding = false;
+
+  // Écrans
+  private screens!: Record<Screen, HTMLElement>;
+  // Conversation
+  private micBtn!: HTMLButtonElement;
+  private statusEl!: HTMLElement;
+  private micBar!: HTMLElement;
+  private scenarioSel!: HTMLSelectElement;
+  private board!: HTMLElement;
+  private corrections!: HTMLElement;
+  private subtitles!: HTMLElement;
+  private gaugeBars!: Record<'fluency' | 'accuracy' | 'vocabulary', HTMLElement>;
+  private cefrBadge!: HTMLElement;
+  private feedbackEl!: HTMLElement;
+  private bilan!: HTMLElement;
+  // Carnet / Réglages : conteneurs re-rendus à la demande
+  private carnetBody!: HTMLElement;
+  private reglagesBody!: HTMLElement;
+
+  private buildId: string;
+  private keySource: KeySource;
+
+  constructor(deps: AppDeps) {
+    this.cb = deps.callbacks;
+    this.store = deps.store;
+    this.settings = deps.settings;
+    this.hasKey = deps.hasKey;
+    this.buildId = deps.buildId;
+    this.keySource = deps.keySource;
+    this.build(deps.root);
+    this.showScreen('conversation');
+  }
+
+  // --- Construction ----------------------------------------------------------
+
+  private build(root: HTMLElement): void {
+    clear(root);
+    const convo = this.buildConversation();
+    const carnet = el('section', { class: 'screen screen-panel', id: 'screen-carnet' }, [
+      this.buildPanelHeader('Carnet'),
+      (this.carnetBody = el('div', { class: 'panel-body' })),
+    ]);
+    const reglages = el('section', { class: 'screen screen-panel', id: 'screen-reglages' }, [
+      this.buildPanelHeader('Réglages'),
+      (this.reglagesBody = el('div', { class: 'panel-body' })),
+    ]);
+    this.screens = { conversation: convo, carnet, reglages };
+    root.append(convo, carnet, reglages);
+  }
+
+  private buildPanelHeader(title: string): HTMLElement {
+    const back = el('button', { class: 'icon-btn', 'aria-label': 'Retour' }, ['‹ Parler']);
+    back.onclick = () => this.showScreen('conversation');
+    return el('header', { class: 'panel-header' }, [back, el('h1', { text: title })]);
+  }
+
+  private buildConversation(): HTMLElement {
+    // Barre du haut
+    this.scenarioSel = el('select', { class: 'scenario', 'aria-label': 'Scénario' }) as HTMLSelectElement;
+    for (const s of SCENARIOS) {
+      this.scenarioSel.append(el('option', { value: s.id }, [s.label]));
+    }
+    this.scenarioSel.value = this.settings.scenario;
+    this.scenarioSel.onchange = () => this.cb.onScenarioChange(this.scenarioSel.value as ScenarioId);
+
+    const carnetTab = el('button', { class: 'icon-btn', 'aria-label': 'Carnet' }, ['📓']);
+    carnetTab.onclick = () => this.showScreen('carnet');
+    const reglagesTab = el('button', { class: 'icon-btn', 'aria-label': 'Réglages' }, ['⚙']);
+    reglagesTab.onclick = () => this.showScreen('reglages');
+
+    const topbar = el('div', { class: 'topbar' }, [carnetTab, this.scenarioSel, reglagesTab]);
+
+    // Jauge live (3 barres + CEFR)
+    this.gaugeBars = {
+      fluency: el('span', { class: 'bar-fill' }),
+      accuracy: el('span', { class: 'bar-fill' }),
+      vocabulary: el('span', { class: 'bar-fill' }),
+    };
+    this.cefrBadge = el('span', { class: 'cefr', text: '—' });
+    this.feedbackEl = el('div', { class: 'feedback' });
+    const gauge = el('div', { class: 'gauge' }, [
+      this.gaugeRow('Fluidité', this.gaugeBars.fluency),
+      this.gaugeRow('Précision', this.gaugeBars.accuracy),
+      this.gaugeRow('Vocabulaire', this.gaugeBars.vocabulary),
+      el('div', { class: 'cefr-wrap' }, [this.cefrBadge]),
+    ]);
+
+    // Scène centrale (transparente sur le visage)
+    this.board = el('div', { class: 'board', hidden: true });
+    this.corrections = el('div', { class: 'corrections' });
+    const stage = el('div', { class: 'stage' }, [this.feedbackEl, this.board, this.corrections]);
+
+    // Sous-titres
+    this.subtitles = el('div', { class: 'subtitles' });
+
+    // Contrôles
+    this.micBtn = el('button', { class: 'mic', 'aria-label': 'Démarrer' }, ['Parler']);
+    this.micBtn.onclick = () => this.cb.onStartStop();
+    this.statusEl = el('div', { class: 'status' });
+    this.micBar = el('span', { class: 'mic-bar-fill' });
+    const controls = el('div', { class: 'controls' }, [
+      el('div', { class: 'mic-bar' }, [this.micBar]),
+      this.micBtn,
+      this.statusEl,
+    ]);
+
+    // Overlay de bilan
+    this.bilan = el('div', { class: 'bilan', hidden: true });
+
+    return el('section', { class: 'screen screen-convo' }, [
+      topbar,
+      gauge,
+      stage,
+      this.subtitles,
+      controls,
+      this.bilan,
+    ]);
+  }
+
+  private gaugeRow(label: string, fill: HTMLElement): HTMLElement {
+    return el('div', { class: 'gauge-row' }, [
+      el('span', { class: 'gauge-label', text: label }),
+      el('span', { class: 'bar' }, [fill]),
+    ]);
+  }
+
+  // --- Navigation ------------------------------------------------------------
+
+  showScreen(s: Screen): void {
+    for (const [name, node] of Object.entries(this.screens)) {
+      node.hidden = name !== s;
+    }
+    if (s === 'carnet') this.renderCarnet();
+    if (s === 'reglages') this.renderReglages();
+  }
+
+  // --- Mises à jour Conversation --------------------------------------------
+
+  setStatus(status: LiveStatus, detail?: string): void {
+    const running = status !== 'idle' && status !== 'error';
+    if (status === 'idle' || status === 'error') this.concluding = false;
+    // Pendant la conclusion, le bouton reste « Terminer » : on ne le laisse pas
+    // repasser à « Stop » à chaque bascule parle/écoute du bilan en cours.
+    if (!this.concluding) {
+      this.micBtn.textContent = running ? 'Stop' : 'Parler';
+      this.micBtn.classList.toggle('on', running);
+    }
+    const labels: Record<LiveStatus, string> = {
+      idle: this.hasKey ? 'prêt' : 'ajoute ta clé dans ⚙ Réglages',
+      connecting: 'connexion…',
+      listening: 'à toi',
+      speaking: 'le prof parle…',
+      error: detail ? `⚠ ${detail}` : '⚠ erreur',
+    };
+    if (this.concluding && running) {
+      this.statusEl.textContent = 'le prof conclut la séance…';
+      this.statusEl.classList.remove('error');
+    } else {
+      this.statusEl.textContent = labels[status];
+      this.statusEl.classList.toggle('error', status === 'error');
+    }
+  }
+
+  /** Passe le bouton en mode « Terminer » pendant que le prof fait son bilan de fin. */
+  setConcluding(on: boolean): void {
+    this.concluding = on;
+    if (on) {
+      this.micBtn.textContent = 'Terminer';
+      this.micBtn.classList.add('on');
+      this.statusEl.textContent = 'le prof conclut la séance…';
+    }
+  }
+
+  setMicLevel(peak: number, sending: boolean): void {
+    this.micBar.style.width = `${Math.min(100, Math.round(peak * 140))}%`;
+    this.micBar.classList.toggle('muted', !sending);
+  }
+
+  setGauge(s: LiveScore): void {
+    this.gaugeBars.fluency.style.width = `${Math.round(s.fluency * 100)}%`;
+    this.gaugeBars.accuracy.style.width = `${Math.round(s.accuracy * 100)}%`;
+    this.gaugeBars.vocabulary.style.width = `${Math.round(s.vocabulary * 100)}%`;
+    this.cefrBadge.textContent = s.level || '—';
+    if (s.feedback) {
+      this.feedbackEl.textContent = s.feedback;
+      this.feedbackEl.classList.add('show');
+      window.clearTimeout(this.feedbackTimer);
+      this.feedbackTimer = window.setTimeout(() => this.feedbackEl.classList.remove('show'), 6000);
+    }
+  }
+  private feedbackTimer = 0;
+
+  showBoard(entry: BoardEntry): void {
+    clear(this.board);
+    this.board.hidden = false;
+    const body =
+      entry.type === 'liste'
+        ? el(
+            'ul',
+            { class: 'board-list' },
+            entry.texte.split(/\r?\n/).filter(Boolean).map((line) => el('li', { text: line })),
+          )
+        : el('div', { class: `board-text board-${entry.type}` }, [this.tappable(entry.texte)]);
+    this.board.append(body);
+    if (entry.traduction) this.board.append(el('div', { class: 'board-tr', text: entry.traduction }));
+  }
+
+  showCorrection(card: CorrectionCard): void {
+    const node = el('div', { class: 'correction' }, [
+      el('span', { class: 'wrong', text: card.dit }),
+      el('span', { class: 'arrow', text: '→' }),
+      el('span', { class: 'right', text: card.correct }),
+      el('div', { class: 'why', text: card.pourquoi }),
+    ]);
+    this.corrections.prepend(node);
+    while (this.corrections.children.length > 3) this.corrections.lastChild?.remove();
+    window.setTimeout(() => node.classList.add('fade'), 12000);
+    window.setTimeout(() => node.remove(), 13000);
+  }
+
+  /** Ajoute une ligne de sous-titres (élève ou prof), selon le mode réglé. */
+  addLine(who: 'user' | 'tutor', text: string): void {
+    if (this.settings.subtitles === 'off') return;
+    if (!text.trim()) return;
+    const line = el('div', { class: `sub sub-${who}` }, [this.tappable(text)]);
+    this.subtitles.append(line);
+    while (this.subtitles.children.length > 4) this.subtitles.firstChild?.remove();
+    this.subtitles.scrollTop = this.subtitles.scrollHeight;
+  }
+
+  /** Rend chaque mot tappable : un tap → traduction + ajout au carnet (PLAN §4). */
+  private tappable(text: string): HTMLElement {
+    const span = el('span');
+    const parts = text.split(/(\s+)/);
+    for (const p of parts) {
+      if (/^\s+$/.test(p) || !p) {
+        span.append(p);
+        continue;
+      }
+      const word = el('span', { class: 'word' }, [p]);
+      word.onclick = () => this.cb.onWordTap(p.replace(/[^\p{L}\p{N}'’-]/gu, ''));
+      span.append(word);
+    }
+    return span;
+  }
+
+  showBilan(summary: SessionSummary, session: SessionRecord | null): void {
+    clear(this.bilan);
+    const card = el('div', { class: 'bilan-card' }, [el('h2', { text: 'Bilan de la séance' })]);
+    if (summary.bravo.length) {
+      card.append(el('h3', { class: 'good', text: '👏 Bravo' }));
+      card.append(el('ul', {}, summary.bravo.map((b) => el('li', { text: b }))));
+    }
+    if (summary.resume) card.append(el('p', { class: 'resume', text: summary.resume }));
+    if (summary.aTravailler.length) {
+      card.append(el('h3', { text: 'À retravailler' }));
+      card.append(el('ul', {}, summary.aTravailler.map((a) => el('li', { text: a }))));
+    }
+    if (session) card.append(this.metricsLine(session));
+    const seeCarnet = el('button', { class: 'primary' }, ['Voir le carnet']);
+    seeCarnet.onclick = () => {
+      this.bilan.hidden = true;
+      this.showScreen('carnet');
+    };
+    const close = el('button', { class: 'ghost' }, ['Fermer']);
+    close.onclick = () => (this.bilan.hidden = true);
+    card.append(el('div', { class: 'bilan-actions' }, [seeCarnet, close]));
+    this.bilan.append(card);
+    this.bilan.hidden = false;
+  }
+
+  private metricsLine(s: SessionRecord): HTMLElement {
+    const spokenMin = ((s.spokenMs ?? 0) / 60000).toFixed(1);
+    const words = s.newWords?.length ?? 0;
+    return el('div', { class: 'metrics', text: `Temps de parole ${spokenMin} min · ${s.turns ?? 0} tours · ${words} mots nouveaux` });
+  }
+
+  // --- Carnet ---------------------------------------------------------------
+
+  refreshNotebook(): void {
+    if (!this.screens.carnet.hidden) this.renderCarnet();
+  }
+
+  private renderCarnet(): void {
+    clear(this.carnetBody);
+    const nb = this.store.getNotebook();
+    const done = nb.sessions.filter((s) => s.endedAt);
+    if (done.length === 0) {
+      this.carnetBody.append(el('p', { class: 'empty', text: 'Pas encore de séance terminée. Ouvre une conversation, puis reviens ici.' }));
+      return;
+    }
+    const last = done[done.length - 1];
+
+    // Dernier bilan
+    if (last.resume || last.bravo?.length) {
+      const sec = el('div', { class: 'card' }, [el('h2', { text: 'Dernière séance' })]);
+      if (last.bravo?.length) sec.append(el('p', { class: 'good', text: '👏 ' + last.bravo.join(' · ') }));
+      if (last.resume) sec.append(el('p', { text: last.resume }));
+      sec.append(this.metricsLine(last));
+      this.carnetBody.append(sec);
+    }
+
+    // Courbe du niveau + scores dans le temps
+    this.carnetBody.append(this.levelChart(done));
+
+    // Erreurs par récurrence
+    const errs = aggregateErrors(nb);
+    if (errs.length) {
+      const sec = el('div', { class: 'card' }, [el('h2', { text: 'Ce qui revient' })]);
+      const list = el('ul', { class: 'errlist' });
+      for (const e of errs.slice(0, 10)) {
+        const recur = e.count >= RECUR_MIN;
+        list.append(
+          el('li', { class: recur ? 'recur' : '' }, [
+            el('span', { class: 'tag', text: e.type }),
+            el('span', { class: 'count', text: `${e.count}×` }),
+            el('span', { class: 'regle', text: e.regle }),
+          ]),
+        );
+      }
+      sec.append(list);
+      this.carnetBody.append(sec);
+    }
+
+    // Mots à réutiliser
+    const words = reusableWords(nb, 6, 20);
+    if (words.length) {
+      const sec = el('div', { class: 'card' }, [el('h2', { text: 'À réutiliser' })]);
+      const wrap = el('div', { class: 'chips' });
+      for (const w of words) {
+        wrap.append(el('span', { class: 'chip', title: w.traduction ?? '' }, [w.mot]));
+      }
+      sec.append(wrap);
+      this.carnetBody.append(sec);
+    }
+  }
+
+  /** Petite courbe SVG : niveau CEFR (0..5) et les trois scores dans le temps. */
+  private levelChart(sessions: SessionRecord[]): HTMLElement {
+    const pts = sessions
+      .map((s) => avgScore(s))
+      .filter((p): p is NonNullable<typeof p> => p !== null);
+    if (pts.length < 1) return el('div');
+    const W = 300;
+    const H = 90;
+    const n = Math.max(pts.length - 1, 1);
+    const x = (i: number) => (i / n) * (W - 10) + 5;
+    const y = (v: number) => H - 10 - v * (H - 20); // v ∈ [0,1]
+    const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, class: 'chart' });
+    const series: [string, (p: NonNullable<ReturnType<typeof avgScore>>) => number][] = [
+      ['s-flu', (p) => p.fluency],
+      ['s-acc', (p) => p.accuracy],
+      ['s-voc', (p) => p.vocabulary],
+    ];
+    for (const [cls, get] of series) {
+      const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(get(p)).toFixed(1)}`).join(' ');
+      svg.append(svgEl('path', { d, class: cls, fill: 'none' }));
+    }
+    // Niveau CEFR : ligne + dernier libellé
+    const cefrD = pts
+      .map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p.cefr / 5).toFixed(1)}`)
+      .join(' ');
+    svg.append(svgEl('path', { d: cefrD, class: 's-cefr', fill: 'none' }));
+    const lastCefr = CEFR[Math.round(pts[pts.length - 1].cefr)] ?? '—';
+    return el('div', { class: 'card' }, [
+      el('h2', { text: 'Progression' }),
+      svg,
+      el('div', { class: 'legend' }, [
+        el('span', { class: 'lg lg-cefr', text: `Niveau ${lastCefr}` }),
+        el('span', { class: 'lg lg-flu', text: 'Fluidité' }),
+        el('span', { class: 'lg lg-acc', text: 'Précision' }),
+        el('span', { class: 'lg lg-voc', text: 'Vocabulaire' }),
+      ]),
+    ]);
+  }
+
+  // --- Réglages -------------------------------------------------------------
+
+  setKeyState(hasKey: boolean, source: KeySource): void {
+    this.hasKey = hasKey;
+    this.keySource = source;
+    if (!this.screens.reglages.hidden) this.renderReglages();
+  }
+
+  private renderReglages(): void {
+    clear(this.reglagesBody);
+    const s = this.settings;
+
+    // Clé Gemini
+    const keyInput = el('input', {
+      type: 'password',
+      placeholder: this.hasKey ? '•••••• (clé enregistrée)' : 'colle ta clé Gemini',
+      class: 'field',
+    }) as HTMLInputElement;
+    const keyBtn = el('button', { class: 'primary' }, ['Enregistrer la clé']);
+    keyBtn.onclick = () => {
+      if (keyInput.value.trim()) this.cb.onKeyChange(keyInput.value.trim());
+    };
+    this.reglagesBody.append(
+      this.card('Clé Gemini', [
+        el('p', { class: 'hint', text: `Source actuelle : ${this.keySource}. La clé reste sur cet appareil.` }),
+        keyInput,
+        keyBtn,
+      ]),
+    );
+
+    // Profil
+    const profileSel = el('select', { class: 'field' }) as HTMLSelectElement;
+    for (const p of this.store.getProfiles()) {
+      const opt = el('option', { value: p.id }, [p.name]);
+      profileSel.append(opt);
+    }
+    profileSel.value = this.store.getActiveId();
+    profileSel.onchange = () => this.cb.onProfileChange(profileSel.value);
+    const newProfile = el('input', { type: 'text', placeholder: 'nouveau profil', class: 'field' }) as HTMLInputElement;
+    const addBtn = el('button', { class: 'ghost' }, ['Ajouter']);
+    addBtn.onclick = () => {
+      if (newProfile.value.trim()) {
+        this.cb.onAddProfile(newProfile.value.trim());
+        newProfile.value = '';
+      }
+    };
+    this.reglagesBody.append(this.card('Profil', [profileSel, el('div', { class: 'row' }, [newProfile, addBtn])]));
+
+    // Métier
+    const job = el('input', { type: 'text', value: s.job, placeholder: 'ton métier en une phrase', class: 'field' }) as HTMLInputElement;
+    job.onchange = () => this.patch({ job: job.value });
+    this.reglagesBody.append(
+      this.card('Métier', [
+        el('p', { class: 'hint', text: 'Rend le vocabulaire pertinent. Évite les noms de clients réels.' }),
+        job,
+      ]),
+    );
+
+    // Voix
+    const voiceSel = el('select', { class: 'field' }) as HTMLSelectElement;
+    for (const v of LIVE_VOICES) voiceSel.append(el('option', { value: v.name }, [v.label]));
+    voiceSel.value = s.voice;
+    voiceSel.onchange = () => this.patch({ voice: voiceSel.value });
+    this.reglagesBody.append(this.card('Voix du prof', [voiceSel]));
+
+    // Seuil de silence
+    const sil = el('input', { type: 'range', min: '500', max: '1500', step: '50', value: String(s.silenceMs), class: 'range' }) as HTMLInputElement;
+    const silVal = el('span', { class: 'range-val', text: `${s.silenceMs} ms` });
+    sil.oninput = () => (silVal.textContent = `${sil.value} ms`);
+    sil.onchange = () => this.patch({ silenceMs: Number(sil.value) });
+    this.reglagesBody.append(
+      this.card('Temps de réflexion', [
+        el('p', { class: 'hint', text: 'Silence avant que le prof réponde. Plus haut = il te laisse chercher tes mots.' }),
+        el('div', { class: 'row' }, [sil, silVal]),
+      ]),
+    );
+
+    // Sous-titres
+    const subSel = el('select', { class: 'field' }) as HTMLSelectElement;
+    const subOpts: [SubtitleMode, string][] = [
+      ['off', 'Aucun'],
+      ['en', 'Anglais'],
+      ['bi', 'Bilingue'],
+    ];
+    for (const [val, label] of subOpts) subSel.append(el('option', { value: val }, [label]));
+    subSel.value = s.subtitles;
+    subSel.onchange = () => this.patch({ subtitles: subSel.value as SubtitleMode });
+    this.reglagesBody.append(this.card('Sous-titres', [subSel]));
+
+    // Export / import
+    const exportBtn = el('button', { class: 'ghost' }, ['Exporter le carnet']);
+    exportBtn.onclick = () => this.cb.onExport();
+    const importInput = el('input', { type: 'file', accept: 'application/json', class: 'field' }) as HTMLInputElement;
+    importInput.onchange = () => {
+      const f = importInput.files?.[0];
+      if (f) this.cb.onImportFile(f);
+    };
+    const clearBtn = el('button', { class: 'danger' }, ['Vider ce carnet']);
+    clearBtn.onclick = () => {
+      if (confirm('Vider le carnet de ce profil ? (irréversible)')) this.cb.onClearNotebook();
+    };
+    this.reglagesBody.append(
+      this.card('Carnet', [exportBtn, el('p', { class: 'hint', text: 'Importer un fichier Loro :' }), importInput, clearBtn]),
+    );
+
+    // Build id
+    this.reglagesBody.append(el('div', { class: 'buildid', text: `build ${this.buildId}` }));
+  }
+
+  private patch(p: Partial<Settings>): void {
+    this.settings = { ...this.settings, ...p };
+    this.cb.onSettingsChange(p);
+  }
+
+  /** Reçoit les réglages courants (après import, p.ex.) pour re-synchroniser les formulaires. */
+  setSettings(s: Settings): void {
+    this.settings = s;
+    this.scenarioSel.value = s.scenario;
+    if (!this.screens.reglages.hidden) this.renderReglages();
+  }
+
+  private card(title: string, children: (Node | string)[]): HTMLElement {
+    return el('div', { class: 'card' }, [el('h2', { text: title }), ...children]);
+  }
+}
+
+/** Score moyen d'une séance + niveau CEFR moyen (0..5), null si aucune notation. */
+function avgScore(s: SessionRecord): { fluency: number; accuracy: number; vocabulary: number; cefr: number } | null {
+  const valid = s.scores.filter((x) => x.fluency || x.accuracy || x.vocabulary);
+  if (valid.length === 0) return null;
+  const mean = (get: (x: (typeof valid)[number]) => number) => valid.reduce((a, x) => a + get(x), 0) / valid.length;
+  const cefrIdx = (lvl: string) => {
+    const i = CEFR.indexOf(lvl);
+    return i < 0 ? NaN : i;
+  };
+  const cefrVals = valid.map((x) => cefrIdx(x.level)).filter((n) => !Number.isNaN(n));
+  const cefr = cefrVals.length ? cefrVals.reduce((a, b) => a + b, 0) / cefrVals.length : 0;
+  return { fluency: mean((x) => x.fluency), accuracy: mean((x) => x.accuracy), vocabulary: mean((x) => x.vocabulary), cefr };
+}

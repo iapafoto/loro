@@ -1,0 +1,58 @@
+# Déploiement de l'app web sur GitHub Pages → https://<compte>.github.io/loro/
+#
+# ⚠️ PRÉREQUIS : le dépôt doit s'appeler `loro` EN MINUSCULES. Pages sert sous le
+# nom du dépôt et github.io est sensible à la casse ; c'est ce qui permet de garder
+# UN SEUL `base: '/loro/'` dans vite.config.ts.
+#
+# POURQUOI PAGES PLUTÔT QUE LE SERVEUR DU PC : le démarrage en un geste (voix qui
+# part sans double-clic) exige une origine à CERTIFICAT VALIDE et STABLE. Le
+# `dev:https` du PC est auto-signé (Chrome refuse d'installer la PWA), et son IP
+# bouge avec le DHCP — chaque changement fait reperdre l'autorisation micro.
+#
+# Rien de secret n'est publié : la clé Gemini vit dans le localStorage du
+# téléphone, jamais dans le bundle (cf. src/agent/apiKey.ts).
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Le tampon de build affiche le hash court du commit : sans l'historique,
+          # `git rev-parse` renverrait autre chose.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

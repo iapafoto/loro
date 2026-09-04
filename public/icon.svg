@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Loro = perroquet. Icône maskable : le motif tient dans la zone sûre centrale. -->
+  <rect width="512" height="512" rx="96" fill="#0d1b2a"/>
+  <g transform="translate(256 260)">
+    <!-- bulle de parole -->
+    <circle r="150" fill="#12324a"/>
+    <!-- corps du perroquet, stylisé -->
+    <path d="M-40 70 C-95 40 -95 -55 -30 -80 C25 -100 90 -70 92 -8 C94 45 45 90 -10 92 Z"
+          fill="#2ec4b6"/>
+    <!-- aile -->
+    <path d="M-20 -20 C20 -35 60 -10 55 40 C25 55 -20 40 -20 -20 Z" fill="#1b9e93"/>
+    <!-- tête -->
+    <circle cx="35" cy="-55" r="42" fill="#ffd166"/>
+    <!-- bec -->
+    <path d="M70 -60 C100 -55 100 -25 70 -30 C82 -45 82 -50 70 -60 Z" fill="#ef476f"/>
+    <!-- œil -->
+    <circle cx="40" cy="-62" r="9" fill="#0d1b2a"/>
+  </g>
+</svg>
