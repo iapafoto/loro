@@ -8,7 +8,7 @@ import { assembleSystemInstruction, interlocuteurById, INTERLOCUTEURS, type Scen
 import { compileBriefing } from './tutor/briefing';
 import { Store } from './learn/store';
 import { newSession, type Notebook, type SessionRecord } from './learn/types';
-import { loadSettings, saveSettings } from './settings';
+import { loadSettings, saveSettings, type Settings } from './settings';
 import { loadGeminiKey, saveGeminiKey } from './agent/apiKey';
 import { buildExport, downloadExport, parseImport, applyImport } from './learn/export';
 import { App } from './ui/app';
@@ -201,12 +201,18 @@ const app = new App({
       // d'interlocuteur non-« pro » (prof-anglais, prof-espagnol) sélectionne ce
       // prof en conversation libre ; sinon c'est un scénario, joué par le pro.
       const inter = INTERLOCUTEURS.find((i) => i.id === value && i.id !== 'pro');
-      if (inter) {
-        settings = { ...settings, interlocuteur: inter.id, scenario: 'libre' };
-      } else {
-        settings = { ...settings, interlocuteur: 'pro', scenario: value as ScenarioId };
-      }
+      const next: Settings = inter
+        ? { ...settings, interlocuteur: inter.id, scenario: 'libre' }
+        : { ...settings, interlocuteur: 'pro', scenario: value as ScenarioId };
+      if (next.interlocuteur === settings.interlocuteur && next.scenario === settings.scenario) return;
+      settings = next;
       saveSettings(settings);
+      app.setSettings(settings); // garde le menu en phase
+      // ⚠️ CHANGEMENT À CHAUD : le prompt système (persona + langue + scénario) est
+      // figé au démarrage d'une session. Pour que le nouvel interlocuteur prenne la
+      // main TOUT DE SUITE — nouvelle langue, nouveau bonjour — on réinitialise : on
+      // clôt la séance en cours et on en rouvre une fraîche avec le nouveau mode.
+      if (live?.active) void restartLive();
     },
     onSettingsChange: (patch) => {
       settings = { ...settings, ...patch };
@@ -281,6 +287,26 @@ async function startLive(): Promise<void> {
   clearConclusion();
   void keepAwake();
   await live.start(buildSystem());
+}
+
+/**
+ * Réinitialise la séance en cours et en rouvre une avec le mode courant — appelé
+ * quand on change d'interlocuteur/scénario en pleine conversation. `live.stop()`
+ * déclenche onStatus('idle') → endSession() (la séance en cours est clôturée) ;
+ * `startLive()` en ouvre une fraîche (nouveau carnet, `greeted=false` → re-bonjour)
+ * avec le prompt reconstruit. Un verrou évite les relances qui se chevauchent si on
+ * change de mode plusieurs fois de suite.
+ */
+let restarting = false;
+async function restartLive(): Promise<void> {
+  if (!live || restarting) return;
+  restarting = true;
+  try {
+    await live.stop();
+    await startLive();
+  } finally {
+    restarting = false;
+  }
 }
 
 /** 1er Stop : on demande au prof un bilan de fin avant de fermer (PLAN §3). */
