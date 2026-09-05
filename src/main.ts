@@ -82,6 +82,42 @@ let concluding = false;
 let concludeFallback = 0;
 const CONCLUDE_FALLBACK_MS = 15000; // si le prof n'appelle pas fin_de_seance, on ferme quand même
 
+// Chien de garde « le prof ne répond pas ». Le modèle peut se taire sans fermer la
+// session ni lever d'erreur : micro allumé, mais aucun son, aucune bouche qui bouge,
+// et rien à l'écran. On ARME ce guet quand une réponse est attendue (après l'accueil,
+// et après chaque tour de l'élève) ; il est DÉSARMÉ dès que le prof produit quoi que
+// ce soit. S'il expire, on affiche un bandeau rouge — sinon la panne est invisible.
+let responseWatch = 0;
+const RESPONSE_TIMEOUT_MS = 11000;
+// Détection LOCALE de fin de tour de l'élève, indépendante du serveur : si le modèle
+// se tait sans même renvoyer de fin de tour, aucun callback serveur n'arrive — c'est
+// le micro qui doit dire « l'élève a parlé puis s'est tu, une réponse est due ».
+let awaitingReply = false;
+let userLastLoudMs = 0;
+const USER_LOUD_THRESHOLD = 0.06; // même ordre que SpeechMeter
+const USER_TURN_GAP_MS = 600; // silence après lequel on considère le tour fini
+function armResponseWatch(): void {
+  clearResponseWatch();
+  responseWatch = window.setTimeout(() => {
+    responseWatch = 0;
+    if (live?.active && !tutorSpeaking) {
+      app.showAlert('Le prof ne répond pas. Vérifie ta connexion, ou appuie sur Stop puis Parler.');
+    }
+  }, RESPONSE_TIMEOUT_MS);
+}
+function clearResponseWatch(): void {
+  if (responseWatch) {
+    clearTimeout(responseWatch);
+    responseWatch = 0;
+  }
+}
+/** Le prof a produit quelque chose : la session répond → on désarme et on efface l'alerte. */
+function tutorResponded(): void {
+  clearResponseWatch();
+  awaitingReply = false;
+  app.clearAlert();
+}
+
 // --- Synchro labiale ---------------------------------------------------------
 //
 // La bouche suit l'ENVELOPPE de la voix réellement jouée (RMS lu sur le graphe
@@ -139,7 +175,9 @@ if (geminiKey) {
   live = new LiveConversation(geminiKey, {
     onStatus: (status, detail) => {
       app.setStatus(status, detail);
+      if (status === 'error') app.showAlert(detail ? `⚠ ${detail}` : '⚠ La connexion au prof a été coupée. Appuie sur Parler pour reprendre.');
       if (status === 'idle' || status === 'error') {
+        clearResponseWatch();
         clearConclusion();
         endSession(); // sauvegarde les métriques si la séance n'a pas été clôturée par le prof
       }
@@ -148,10 +186,14 @@ if (geminiKey) {
       app.addLine('user', t);
       countNewWords(t);
     },
-    onTutorText: (t) => app.addLine('tutor', t),
+    onTutorText: (t) => {
+      tutorResponded();
+      app.addLine('tutor', t);
+    },
     onSpeakingChange: (sp) => {
       tutorSpeaking = sp;
       if (sp) {
+        tutorResponded(); // le prof parle : la session répond bien
         startMouthSync();
         meter.flush(); // le prof prend la parole : on clôt le tour de l'élève
       } else {
@@ -163,6 +205,17 @@ if (geminiKey) {
       // On ne compte le temps de parole que quand le prof se TAIT : sinon sa propre
       // voix (que le micro entend malgré l'annulation d'écho) gonflerait le compteur.
       if (!tutorSpeaking) meter.push(peak);
+      // Guet « pas de réponse » : l'élève parle (fort) puis se tait → on arme, une
+      // réponse est attendue. Désarmé dès que le prof produit quoi que ce soit
+      // (tutorResponded). Ne s'arme jamais dans le silence : pas de faux positif.
+      if (tutorSpeaking) return;
+      if (peak > USER_LOUD_THRESHOLD) {
+        userLastLoudMs = Date.now();
+        awaitingReply = true;
+      } else if (awaitingReply && Date.now() - userLastLoudMs > USER_TURN_GAP_MS) {
+        awaitingReply = false;
+        armResponseWatch();
+      }
     },
     onStalled: (reason) => console.warn('[loro] voix débloquée :', reason),
     onResumed: () => console.info('[loro] session reprise (au-delà du plafond ~15 min)'),
@@ -173,6 +226,8 @@ if (geminiKey) {
       if (greeted) return;
       greeted = true;
       live?.notify(interlocuteurById(settings.interlocuteur).accueil);
+      armResponseWatch(); // on attend le bonjour du prof
+
     },
     dispatch: (call) => dispatcher.dispatch(call),
   });
@@ -292,6 +347,9 @@ async function startLive(): Promise<void> {
   meter.reset();
   greeted = false; // l'accueil (onReady) resalue à la première ouverture de CETTE séance
   clearConclusion();
+  clearResponseWatch();
+  awaitingReply = false;
+  app.clearAlert();
   void keepAwake();
   await live.start(buildSystem());
 }

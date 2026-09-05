@@ -178,6 +178,24 @@ body {
   padding: 14px 18px;
   text-align: center;
   max-width: 90%;
+  transition: opacity 0.8s;
+}
+.board.fade {
+  opacity: 0;
+}
+
+/* Bandeau d'alerte (coupure / silence du prof) — rouge, visible sur le visage. */
+.alert {
+  pointer-events: auto;
+  background: rgba(60, 12, 26, 0.92);
+  border: 1px solid var(--coral);
+  border-left: 4px solid var(--coral);
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: var(--text);
+  font-size: 14px;
+  text-align: center;
+  max-width: 90%;
 }
 .board-text {
   font-weight: 600;

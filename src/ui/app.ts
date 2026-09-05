@@ -49,6 +49,9 @@ export interface AppDeps {
 
 const CEFR = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 
+/** Durée d'affichage d'un mot/phrase au tableau avant fondu de disparition. */
+const BOARD_VISIBLE_MS = 15000;
+
 export class App {
   private readonly cb: AppCallbacks;
   private readonly store: Store;
@@ -64,7 +67,9 @@ export class App {
   private micBar!: HTMLElement;
   private scenarioSel!: HTMLSelectElement;
   private board!: HTMLElement;
+  private boardTimer = 0;
   private corrections!: HTMLElement;
+  private alertEl!: HTMLElement;
   private subtitles!: HTMLElement;
   private gaugeBars!: Record<'fluency' | 'accuracy' | 'vocabulary', HTMLElement>;
   private cefrBadge!: HTMLElement;
@@ -152,7 +157,10 @@ export class App {
     // Scène centrale (transparente sur le visage)
     this.board = el('div', { class: 'board', hidden: true });
     this.corrections = el('div', { class: 'corrections' });
-    const stage = el('div', { class: 'stage' }, [this.feedbackEl, this.board, this.corrections]);
+    // Bandeau d'alerte (rouge) : coupure/silence du prof, rendu VISIBLE à l'écran —
+    // le statut en bas passe inaperçu quand on regarde le visage.
+    this.alertEl = el('div', { class: 'alert', hidden: true });
+    const stage = el('div', { class: 'stage' }, [this.alertEl, this.feedbackEl, this.board, this.corrections]);
 
     // Sous-titres
     this.subtitles = el('div', { class: 'subtitles' });
@@ -256,6 +264,8 @@ export class App {
 
   showBoard(entry: BoardEntry): void {
     clear(this.board);
+    window.clearTimeout(this.boardTimer);
+    this.board.classList.remove('fade');
     this.board.hidden = false;
     const body =
       entry.type === 'liste'
@@ -267,6 +277,28 @@ export class App {
         : el('div', { class: `board-text board-${entry.type}` }, [this.tappable(entry.texte)]);
     this.board.append(body);
     if (entry.traduction) this.board.append(el('div', { class: 'board-tr', text: entry.traduction }));
+    // Disparaît en fondu au bout d'un moment, plutôt que de rester jusqu'à ce qu'un
+    // autre mot le chasse. Chaque nouveau tableau relance le compte (timer effacé
+    // ci-dessus). Le fondu (classe .fade) dure ~0,8 s, cf. style.css.
+    this.boardTimer = window.setTimeout(() => {
+      this.board.classList.add('fade');
+      this.boardTimer = window.setTimeout(() => {
+        this.board.hidden = true;
+        this.board.classList.remove('fade');
+        clear(this.board);
+      }, 900);
+    }, BOARD_VISIBLE_MS);
+  }
+
+  /** Bandeau rouge visible (coupure, silence du prof…). Persiste jusqu'à clearAlert. */
+  showAlert(message: string): void {
+    this.alertEl.textContent = message;
+    this.alertEl.hidden = false;
+  }
+
+  clearAlert(): void {
+    this.alertEl.hidden = true;
+    this.alertEl.textContent = '';
   }
 
   showCorrection(card: CorrectionCard): void {
