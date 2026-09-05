@@ -35,6 +35,16 @@ let currentSession: SessionRecord | null = null;
 
 const { key: geminiKey, source: keySource } = loadGeminiKey();
 
+// Emotes centralisées ici pour respecter le réglage `emotes` (désactivable). Toutes
+// les bouffées — réussite, bascule d'humeur, emoji libre choisi par le modèle —
+// passent par ces deux helpers ; à off, rien ne monte à l'écran.
+function spawnEmote(kind: Parameters<EmoteLayer['spawn']>[0]): void {
+  if (settings.emotes) emotes.spawn(kind);
+}
+function spawnEmoji(glyph: string): void {
+  if (settings.emotes) emotes.spawnEmoji(glyph);
+}
+
 // --- Métrique de temps de parole (VAD locale minimale, PLAN §4) --------------
 //
 // Bien plus léger que la LocalVad de Mochi : ici on ne pilote pas un robot, on
@@ -162,7 +172,7 @@ const handlers: TutorHandlers = {
     // Une réussite = un vrai moment positif : coup de pouce d'humeur + une bouffée
     // de cœurs, motivant et fun (demande utilisateur).
     mood.nudge(0.32, 0.14);
-    emotes.spawn('hearts');
+    spawnEmote('hearts');
     persist();
   },
   ecris: (x) => app.showBoard(x),
@@ -180,6 +190,12 @@ const handlers: TutorHandlers = {
 };
 const dispatcher = new TutorDispatcher(face, handlers, {
   onEmotion: (emotion, intensity) => mood.nudgeFromEmotion(emotion, intensity),
+  // Emoji libre (outil `emote`) : l'icône monte à l'écran + petit coup de pouce
+  // d'humeur (le prof marque un moment positif).
+  onEmote: (emoji) => {
+    spawnEmoji(emoji);
+    mood.nudge(0.16, 0.1);
+  },
 });
 
 // --- Session Live ------------------------------------------------------------
@@ -530,7 +546,7 @@ function startMoodLoop(): void {
     const now = performance.now() / 1000;
     const happy = m.valence > 0.6 && m.arousal > 0.5;
     if (happy && !wasHappy && now - lastAutoEmote > 6) {
-      emotes.spawn(Math.random() < 0.5 ? 'hearts' : 'sparkles');
+      spawnEmote(Math.random() < 0.5 ? 'hearts' : 'sparkles');
       lastAutoEmote = now;
     }
     wasHappy = happy;

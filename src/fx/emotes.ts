@@ -11,8 +11,12 @@ export type EmoteKind =
   | 'sweat'
   | 'question'
   | 'exclaim'
-  | 'rain';
+  | 'rain'
+  | 'emoji';
 
+// Les types DESSINÉS (formes vectorielles). `emoji` en est exclu : c'est un
+// caractère libre rendu en texte, pas une forme, et il n'entre pas dans les
+// bouffées aléatoires.
 export const EMOTE_KINDS: EmoteKind[] = [
   'hearts',
   'sparkles',
@@ -25,6 +29,8 @@ export const EMOTE_KINDS: EmoteKind[] = [
 
 interface Particle {
   kind: EmoteKind;
+  /** Caractère à rendre quand kind === 'emoji' (choisi librement par le modèle). */
+  glyph?: string;
   x: number;
   y: number;
   vx: number;
@@ -48,6 +54,7 @@ const COUNT: Record<EmoteKind, number> = {
   question: 1,
   exclaim: 1,
   rain: 9,
+  emoji: 3,
 };
 
 export class EmoteLayer {
@@ -73,6 +80,27 @@ export class EmoteLayer {
     this.ensureLoop();
   }
 
+  /**
+   * Fait monter un emoji LIBRE (choisi par le modèle via l'outil `emote`), rendu en
+   * texte. Physique de flottaison douce, comme les cœurs. On limite à quelques
+   * caractères pour éviter qu'une phrase entière ne monte à l'écran.
+   */
+  spawnEmoji(glyph: string, count = 3): void {
+    const g = [...glyph.trim()].slice(0, 2).join(''); // 1-2 code points d'emoji max
+    if (!g) return;
+    const rnd = (a: number, b: number) => a + Math.random() * (b - a);
+    for (let i = 0; i < count; i++) {
+      this.particles.push({
+        ...this.make('hearts'), // reprend la trajectoire montante des cœurs
+        kind: 'emoji',
+        glyph: g,
+        size: rnd(34, 52),
+        color: '#ffffff',
+      });
+    }
+    this.ensureLoop();
+  }
+
   private make(kind: EmoteKind): Particle {
     const cx = this.w * 0.5;
     const cy = this.h * 0.48; // centre du visage
@@ -95,6 +123,7 @@ export class EmoteLayer {
     };
 
     switch (kind) {
+      case 'emoji': // trajectoire montante douce, comme les cœurs (glyph posé par spawnEmoji)
       case 'hearts':
         return {
           ...base,
@@ -223,7 +252,15 @@ export class EmoteLayer {
       ctx.translate(p.x, p.y);
       ctx.rotate(p.rot);
       ctx.fillStyle = p.color;
-      if (p.kind === 'question' || p.kind === 'exclaim') {
+      if (p.kind === 'emoji') {
+        // Emoji libre (choisi par le modèle) : rendu en texte. L'apparence dépend de
+        // la police emoji du système (Android/iOS diffèrent) — c'est le prix de la
+        // diversité. On ne teinte pas (les emojis portent leurs propres couleurs).
+        ctx.font = `${p.size * pop}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(p.glyph ?? '⭐', 0, 0);
+      } else if (p.kind === 'question' || p.kind === 'exclaim') {
         ctx.font = `700 ${p.size * pop}px system-ui, sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';

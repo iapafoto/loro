@@ -208,6 +208,26 @@ export const TUTOR_DECLARATIONS: FunctionDeclaration[] = [
     },
   },
   {
+    name: 'emote',
+    description:
+      "RÉACTION VISUELLE : fais MONTER une petite icône emoji au-dessus du visage (cœurs, "
+      + "pouce, étincelles, applaudissements…). Purement décoratif et ENCOURAGEANT — ne "
+      + "l'annonce pas, n'en parle pas. Choisis TOI l'emoji qui colle au moment (👏 pour une "
+      + "belle phrase, ❤️ pour un bel effort, ✨ pour un progrès, 🤔 pour une hésitation, 💪 pour "
+      + "un encouragement). Reste SOBRE : une réaction de temps en temps sur un vrai moment, "
+      + "PAS à chaque réplique — sinon ça sature l'écran.",
+    parameters: {
+      type: 'object',
+      properties: {
+        emoji: {
+          type: 'string',
+          description: 'Un seul caractère emoji (ex. 👏, ❤️, ✨, 👍, 🎉, 🤔, 💪).',
+        },
+      },
+      required: ['emoji'],
+    },
+  },
+  {
     name: 'look',
     description: 'Oriente le regard (les yeux seulement).',
     parameters: {

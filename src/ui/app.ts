@@ -75,7 +75,6 @@ export class App {
   private subtitles!: HTMLElement;
   private gaugeBars!: Record<'fluency' | 'accuracy' | 'vocabulary', HTMLElement>;
   private cefrBadge!: HTMLElement;
-  private feedbackEl!: HTMLElement;
   private bilan!: HTMLElement;
   // Carnet / Réglages : conteneurs re-rendus à la demande
   private carnetBody!: HTMLElement;
@@ -150,7 +149,6 @@ export class App {
       vocabulary: el('span', { class: 'bar-fill' }),
     };
     this.cefrBadge = el('span', { class: 'cefr', text: '—' });
-    this.feedbackEl = el('div', { class: 'feedback' });
     const gauge = el('div', { class: 'gauge' }, [
       this.gaugeRow('Fluidité', this.gaugeBars.fluency),
       this.gaugeRow('Précision', this.gaugeBars.accuracy),
@@ -158,16 +156,19 @@ export class App {
       el('div', { class: 'cefr-wrap' }, [this.cefrBadge]),
     ]);
 
-    // Scène centrale (transparente sur le visage)
+    // Scène centrale : volontairement dégagée pour laisser voir le visage. Seul le
+    // bandeau d'alerte rouge (coupure/silence du prof) y flotte, car il doit sauter
+    // aux yeux — le statut en bas passe inaperçu quand on regarde le prof.
+    this.alertEl = el('div', { class: 'alert', hidden: true });
+    const stage = el('div', { class: 'stage' }, [this.alertEl]);
+
+    // Bande basse (« dock ») : tout ce qui se LIT est regroupé ici, en bas et en
+    // GROS — le tableau (règles), les corrections bleues, puis le sous-titre du prof.
+    // On a libéré la place en supprimant l'évaluation orange (peu lisible, parasite).
     this.board = el('div', { class: 'board', hidden: true });
     this.corrections = el('div', { class: 'corrections' });
-    // Bandeau d'alerte (rouge) : coupure/silence du prof, rendu VISIBLE à l'écran —
-    // le statut en bas passe inaperçu quand on regarde le visage.
-    this.alertEl = el('div', { class: 'alert', hidden: true });
-    const stage = el('div', { class: 'stage' }, [this.alertEl, this.feedbackEl, this.board, this.corrections]);
-
-    // Sous-titres
     this.subtitles = el('div', { class: 'subtitles' });
+    const dock = el('div', { class: 'dock' }, [this.board, this.corrections, this.subtitles]);
 
     // Contrôles
     this.micBtn = el('button', { class: 'mic', 'aria-label': 'Démarrer' }, ['Parler']);
@@ -187,7 +188,7 @@ export class App {
       topbar,
       gauge,
       stage,
-      this.subtitles,
+      dock,
       controls,
       this.bilan,
     ]);
@@ -257,18 +258,14 @@ export class App {
   }
 
   setGauge(s: LiveScore): void {
+    // La jauge (barres + niveau) se met à jour SILENCIEUSEMENT ; le retour texte
+    // (ex-bandeau orange) n'est plus affiché en direct — il parasitait le dialogue.
+    // Il reste consigné dans le compte rendu (transcript), lisible à tête reposée.
     this.gaugeBars.fluency.style.width = `${Math.round(s.fluency * 100)}%`;
     this.gaugeBars.accuracy.style.width = `${Math.round(s.accuracy * 100)}%`;
     this.gaugeBars.vocabulary.style.width = `${Math.round(s.vocabulary * 100)}%`;
     this.cefrBadge.textContent = s.level || '—';
-    if (s.feedback) {
-      this.feedbackEl.textContent = s.feedback;
-      this.feedbackEl.classList.add('show');
-      window.clearTimeout(this.feedbackTimer);
-      this.feedbackTimer = window.setTimeout(() => this.feedbackEl.classList.remove('show'), 6000);
-    }
   }
-  private feedbackTimer = 0;
 
   showBoard(entry: BoardEntry): void {
     clear(this.board);
@@ -322,13 +319,18 @@ export class App {
     window.setTimeout(() => node.remove(), 13000);
   }
 
-  /** Ajoute une ligne de sous-titres (élève ou prof), selon le mode réglé. */
+  /**
+   * Sous-titre du PROF uniquement. La transcription de l'élève n'est plus affichée
+   * (peu fiable — elle partait parfois en caractères CJK) ; elle reste seulement
+   * consignée dans le compte rendu (cf. main.ts logTranscript).
+   */
   addLine(who: 'user' | 'tutor', text: string): void {
+    if (who !== 'tutor') return; // l'élève ne s'affiche plus
     if (this.settings.subtitles === 'off') return;
     if (!text.trim()) return;
-    const line = el('div', { class: `sub sub-${who}` }, [this.tappable(text)]);
+    const line = el('div', { class: 'sub sub-tutor' }, [this.tappable(text)]);
     this.subtitles.append(line);
-    while (this.subtitles.children.length > 4) this.subtitles.firstChild?.remove();
+    while (this.subtitles.children.length > 3) this.subtitles.firstChild?.remove();
     this.subtitles.scrollTop = this.subtitles.scrollHeight;
   }
 
@@ -612,17 +614,34 @@ export class App {
       ]),
     );
 
-    // Sous-titres
+    // Sous-titres du prof (l'élève n'est plus transcrit à l'écran)
     const subSel = el('select', { class: 'field' }) as HTMLSelectElement;
     const subOpts: [SubtitleMode, string][] = [
-      ['off', 'Aucun'],
-      ['en', 'Anglais'],
-      ['bi', 'Bilingue'],
+      ['on', 'Afficher'],
+      ['off', 'Masquer'],
     ];
     for (const [val, label] of subOpts) subSel.append(el('option', { value: val }, [label]));
-    subSel.value = s.subtitles;
+    subSel.value = s.subtitles === 'off' ? 'off' : 'on';
     subSel.onchange = () => this.patch({ subtitles: subSel.value as SubtitleMode });
-    this.reglagesBody.append(this.card('Sous-titres', [subSel]));
+    this.reglagesBody.append(
+      this.card('Sous-titres du prof', [
+        el('p', { class: 'hint', text: "Le texte de l'élève n'est plus affiché (transcription peu fiable) ; il reste dans le compte rendu de fin." }),
+        subSel,
+      ]),
+    );
+
+    // Emotes / réactions (icônes qui montent au-dessus du visage)
+    const emoteSel = el('select', { class: 'field' }) as HTMLSelectElement;
+    emoteSel.append(el('option', { value: 'on' }, ['Activées']));
+    emoteSel.append(el('option', { value: 'off' }, ['Désactivées']));
+    emoteSel.value = s.emotes ? 'on' : 'off';
+    emoteSel.onchange = () => this.patch({ emotes: emoteSel.value === 'on' });
+    this.reglagesBody.append(
+      this.card('Emotes', [
+        el('p', { class: 'hint', text: 'Petites icônes (cœurs, applaudissements…) que le prof fait monter à l’écran pour encourager.' }),
+        emoteSel,
+      ]),
+    );
 
     // Export / import
     const exportBtn = el('button', { class: 'ghost' }, ['Exporter le carnet']);

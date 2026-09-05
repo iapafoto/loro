@@ -54,6 +54,8 @@ const ERROR_TYPES: readonly ErrorType[] = ['grammaire', 'vocabulaire', 'prononci
 /** Effets affectifs branchés par main.ts (humeur cumulative + emotes). */
 export interface AffectSink {
   onEmotion(emotion: Emotion, intensity: number): void;
+  /** Emoji libre choisi par le modèle (outil `emote`) → icône qui monte à l'écran. */
+  onEmote(emoji: string): void;
 }
 
 export class TutorDispatcher {
@@ -129,6 +131,11 @@ export class TutorDispatcher {
         express(this.face, emotion, intensity);
         this.affect?.onEmotion(emotion, intensity); // l'émotion fait évoluer l'humeur
         return ok(emotion);
+      }
+      case 'emote': {
+        const emoji = str(a.emoji).trim();
+        if (emoji) this.affect?.onEmote(emoji);
+        return ok(emoji || 'emote vide');
       }
       case 'look': {
         look(this.face, String(a.dir ?? 'center') as LookDir);
