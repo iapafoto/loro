@@ -203,6 +203,9 @@ export class App {
   // --- Navigation ------------------------------------------------------------
 
   showScreen(s: Screen): void {
+    // Referme le clavier virtuel : un champ resté focus (Android) piège les taps et
+    // donne l'impression de rester « bloqué » sur le panneau.
+    (document.activeElement as HTMLElement | null)?.blur?.();
     for (const [name, node] of Object.entries(this.screens)) {
       node.hidden = name !== s;
     }

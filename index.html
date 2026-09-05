@@ -2,7 +2,15 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- interactive-widget=resizes-content : sur Android Chrome, le clavier virtuel
+         REDIMENSIONNE la mise en page au lieu de la laisser sous le clavier. Sans ça,
+         après avoir tapé dans un champ des Réglages, le layout plein écran et le
+         clavier se disputent le viewport et les taps ne tombaient plus au bon endroit
+         (impression de rester « bloqué » sur les Réglages). -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
+    />
     <meta name="theme-color" content="#0d1b2a" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="icon.svg" />
