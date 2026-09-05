@@ -8,7 +8,8 @@
 //     aucun effet à l'écran. Le prof les appelle en parlant, sans les annoncer.
 //   — VISIBLE (ecris, corrige, evaluate_english_level, fin_de_seance) : ça bouge à
 //     l'écran (tableau, carte de correction, jauge, écran de bilan).
-//   — EXPRESSION (express, look, blink) : le visage, repris de Mochi.
+//   — EXPRESSION (express, look) : le visage, repris de Mochi. Le clignement, lui,
+//     est automatique (startAutoBlink), pas un outil.
 //
 // ⚠️ Ne mets aucun détail réseau ici sauf `toGeminiTools`, qui adapte au SDK — et
 // qui est isolé en bas de fichier pour que le banc `test-live-config.mjs` charge la
@@ -222,20 +223,8 @@ export const TUTOR_DECLARATIONS: FunctionDeclaration[] = [
       required: ['dir'],
     },
   },
-  {
-    name: 'blink',
-    description: 'Cligne des yeux — un petit signe de vie, ou un clin d’œil complice avec `side`.',
-    parameters: {
-      type: 'object',
-      properties: {
-        side: {
-          type: 'string',
-          enum: ['left', 'right'],
-          description: 'Un seul œil = clin d’œil. Omets-le pour un clignement ordinaire.',
-        },
-      },
-    },
-  },
+  // Pas d'outil `blink` : le clignement est géré par le soft (startAutoBlink), en
+  // continu et automatiquement. L'IA ne pilote pas les paupières.
 ];
 
 const TYPE_MAP: Record<ParamSchema['type'], Type> = {

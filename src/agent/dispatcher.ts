@@ -6,7 +6,7 @@
 // lui, est piloté ici, comme chez Mochi.
 
 import { REST_FACE, type FaceState } from '../face/faceState';
-import { express, look, blink, wink, type Emotion, type LookDir } from '../face/expressions';
+import { express, look, type Emotion, type LookDir } from '../face/expressions';
 import type { ToolCall } from './tutorTools';
 import type { ErrorType } from '../learn/types';
 
@@ -126,12 +126,8 @@ export class TutorDispatcher {
         look(this.face, String(a.dir ?? 'center') as LookDir);
         return ok(String(a.dir ?? 'center'));
       }
-      case 'blink': {
-        const side = a.side === 'left' || a.side === 'right' ? a.side : null;
-        if (side) wink(this.face, side);
-        else blink(this.face);
-        return ok(side ? `clin d'œil ${side}` : '');
-      }
+      // Le clignement N'EST PAS un outil : il est géré par le soft (startAutoBlink),
+      // en continu et automatiquement — l'IA n'a pas à le piloter.
 
       default:
         return { ok: false, detail: 'outil inconnu' };
