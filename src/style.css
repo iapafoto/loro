@@ -393,6 +393,18 @@ body {
   font-size: 18px;
   margin: 0;
 }
+/* Retour bien visible : c'est LE chemin vers la conversation (couleur d'accent). */
+.back-btn {
+  background: var(--teal);
+  color: #04202b;
+  border: none;
+  border-radius: 10px;
+  padding: 9px 14px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
 .panel-body {
   flex: 1;
   overflow-y: auto;

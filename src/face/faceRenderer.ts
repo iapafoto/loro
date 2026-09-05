@@ -59,8 +59,20 @@ export class FaceRenderer {
   start(): void {
     if (this.running) return;
     this.running = true;
+    this.resize(); // le canvas a pu passer en display:none (0×0) pendant la pause
     this.lastT = performance.now() / 1000;
     requestAnimationFrame(this.frame);
+  }
+
+  /**
+   * Arrête la boucle de rendu. ⚠️ ESSENTIEL SUR MOBILE : le visage est un shader
+   * PLEIN ÉCRAN, et il est rendu en permanence — même derrière les panneaux opaques
+   * Carnet/Réglages, où il est invisible. Sur téléphone, ça garde le GPU saturé et
+   * rend toute l'app poussive (le retour vers la conversation prenait de longues
+   * secondes). On coupe le rendu dès qu'on quitte l'écran conversation.
+   */
+  stop(): void {
+    this.running = false;
   }
 
   /** Teinte d'ambiance (RGB 0..1) pilotée par l'humeur. */

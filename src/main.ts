@@ -312,6 +312,13 @@ const app = new App({
       nb = store.getNotebook();
       app.refreshNotebook();
     },
+    onScreenChange: (screen) => {
+      // Le visage est un shader plein écran, caché derrière les panneaux opaques
+      // Carnet/Réglages. On coupe son rendu là-bas pour ne pas saturer le GPU du
+      // téléphone (sinon le retour à la conversation traîne). Il reprend ici.
+      if (screen === 'conversation') renderer.start();
+      else renderer.stop();
+    },
   },
 });
 

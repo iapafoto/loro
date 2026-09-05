@@ -35,6 +35,8 @@ export interface AppCallbacks {
   onImportFile(file: File): void;
   onWordTap(word: string): void;
   onClearNotebook(): void;
+  /** Écran affiché — pour mettre le rendu du visage en pause hors conversation. */
+  onScreenChange?(screen: Screen): void;
 }
 
 export interface AppDeps {
@@ -111,7 +113,9 @@ export class App {
   }
 
   private buildPanelHeader(title: string): HTMLElement {
-    const back = el('button', { class: 'icon-btn', 'aria-label': 'Retour' }, ['‹ Parler']);
+    const back = el('button', { class: 'back-btn', 'aria-label': 'Retour à la conversation' }, [
+      '‹ Conversation',
+    ]);
     back.onclick = () => this.showScreen('conversation');
     return el('header', { class: 'panel-header' }, [back, el('h1', { text: title })]);
   }
@@ -204,6 +208,7 @@ export class App {
     }
     if (s === 'carnet') this.renderCarnet();
     if (s === 'reglages') this.renderReglages();
+    this.cb.onScreenChange?.(s); // après avoir démasqué : le renderer relit la taille
   }
 
   // --- Mises à jour Conversation --------------------------------------------
