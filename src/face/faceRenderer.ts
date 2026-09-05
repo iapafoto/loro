@@ -32,7 +32,18 @@ export class FaceRenderer {
   private readonly uAmbient: WebGLUniformLocation | null;
   private ambient: [number, number, number] = [0, 0, 0];
   private lastT = performance.now() / 1000;
+  private lastRender = 0;
   private running = false;
+
+  /**
+   * Charge de rendu bridée pour MOBILE. Le visage est un shader plein écran : à
+   * 60 fps et DPR 2, sur un GPU de téléphone, il sature le compositeur et rend
+   * toute l'app poussive (transitions/taps qui traînent). Un visage n'a besoin ni
+   * de 60 fps ni de la pleine densité de pixels : on plafonne les deux. Gain de
+   * charge ~×3, sans différence visible.
+   */
+  private static readonly MAX_DPR = 1.5;
+  private static readonly MIN_FRAME_S = 1 / 30;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -61,6 +72,7 @@ export class FaceRenderer {
     this.running = true;
     this.resize(); // le canvas a pu passer en display:none (0×0) pendant la pause
     this.lastT = performance.now() / 1000;
+    this.lastRender = 0; // force un rendu immédiat à la reprise
     requestAnimationFrame(this.frame);
   }
 
@@ -82,13 +94,16 @@ export class FaceRenderer {
 
   private frame = (): void => {
     if (!this.running) return;
+    requestAnimationFrame(this.frame);
     const now = performance.now() / 1000;
+    // Bride à ~30 fps : on saute le rendu tant que l'intervalle mini n'est pas écoulé.
+    if (now - this.lastRender < FaceRenderer.MIN_FRAME_S) return;
     const dt = Math.min(0.05, now - this.lastT); // borne les gros écarts (onglet inactif)
     this.lastT = now;
+    this.lastRender = now;
 
     this.face.step(dt);
     this.render(now);
-    requestAnimationFrame(this.frame);
   };
 
   private render(time: number): void {
@@ -104,7 +119,7 @@ export class FaceRenderer {
   }
 
   private resize(): void {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, FaceRenderer.MAX_DPR);
     const w = Math.floor(this.canvas.clientWidth * dpr);
     const h = Math.floor(this.canvas.clientHeight * dpr);
     if (this.canvas.width !== w || this.canvas.height !== h) {
