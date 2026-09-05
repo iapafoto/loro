@@ -374,6 +374,64 @@ body {
   display: flex;
   gap: 10px;
   margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+/* --- Relecture de fin : conversation + conseils intercalés --- */
+.review-wrap {
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+.review-wrap > summary {
+  cursor: pointer;
+  color: var(--teal);
+  font-size: 14px;
+  font-weight: 600;
+}
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+.r-line {
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 14px;
+  max-width: 92%;
+}
+.r-user {
+  align-self: flex-end;
+  background: rgba(46, 196, 182, 0.16);
+}
+.r-tutor {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.07);
+}
+.r-tip {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.r-tip.r-correction {
+  background: rgba(239, 71, 111, 0.12);
+  border-left: 3px solid var(--coral);
+}
+.r-tip.r-feedback {
+  background: rgba(255, 209, 102, 0.12);
+  border-left: 3px solid var(--gold);
+}
+.r-tip-text {
+  font-weight: 600;
+}
+.r-tip-note {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 /* --- Panneaux (Carnet, Réglages) --- */

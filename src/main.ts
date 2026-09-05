@@ -7,7 +7,7 @@ import { TutorDispatcher, type TutorHandlers, type SessionSummary } from './agen
 import { assembleSystemInstruction, interlocuteurById, INTERLOCUTEURS, type ScenarioId } from './tutor/persona';
 import { compileBriefing } from './tutor/briefing';
 import { Store } from './learn/store';
-import { newSession, type Notebook, type SessionRecord } from './learn/types';
+import { newSession, type Notebook, type SessionRecord, type TranscriptEntry } from './learn/types';
 import { loadSettings, saveSettings, type Settings } from './settings';
 import { loadGeminiKey, saveGeminiKey } from './agent/apiKey';
 import { buildExport, downloadExport, parseImport, applyImport } from './learn/export';
@@ -159,10 +159,14 @@ const handlers: TutorHandlers = {
     persist();
   },
   ecris: (x) => app.showBoard(x),
-  corrige: (c) => app.showCorrection(c),
+  corrige: (c) => {
+    app.showCorrection(c);
+    logTranscript('correction', `${c.dit} → ${c.correct}`, c.pourquoi);
+  },
   evaluate: (s) => {
     currentSession?.scores.push({ ...s, ts: Date.now() });
     app.setGauge(s);
+    if (s.feedback?.trim()) logTranscript('feedback', s.feedback.trim());
     persist();
   },
   finDeSeance: (f) => onFinDeSeance(f),
@@ -185,10 +189,12 @@ if (geminiKey) {
     onUserText: (t) => {
       app.addLine('user', t);
       countNewWords(t);
+      logTranscript('user', t);
     },
     onTutorText: (t) => {
       tutorResponded();
       app.addLine('tutor', t);
+      logTranscript('tutor', t);
     },
     onSpeakingChange: (sp) => {
       tutorSpeaking = sp;
@@ -445,6 +451,15 @@ function finalizeSession(summary?: SessionSummary): SessionRecord | null {
 
 function persist(): void {
   store.save(nb);
+}
+
+/** Journalise une ligne du déroulé (conversation + tips) pour la relecture de fin. */
+function logTranscript(kind: TranscriptEntry['kind'], text: string, note?: string): void {
+  if (!currentSession) return;
+  const clean = text.trim();
+  if (!clean) return;
+  (currentSession.transcript ??= []).push({ kind, text: clean, note, ts: Date.now() });
+  persist();
 }
 
 /** Compte les mots produits pour la PREMIÈRE fois (métrique §4). */

@@ -358,6 +358,12 @@ export class App {
       card.append(el('ul', {}, summary.aTravailler.map((a) => el('li', { text: a }))));
     }
     if (session) card.append(this.metricsLine(session));
+
+    // La conversation rejouée, avec les conseils intercalés — lisibles à tête
+    // reposée, contrairement à l'orange en pleine session.
+    const review = session ? this.buildReview(session) : null;
+    if (review) card.append(review);
+
     const seeCarnet = el('button', { class: 'primary' }, ['Voir le carnet']);
     seeCarnet.onclick = () => {
       this.bilan.hidden = true;
@@ -365,9 +371,60 @@ export class App {
     };
     const close = el('button', { class: 'ghost' }, ['Fermer']);
     close.onclick = () => (this.bilan.hidden = true);
-    card.append(el('div', { class: 'bilan-actions' }, [seeCarnet, close]));
+    const actions = el('div', { class: 'bilan-actions' }, [seeCarnet, close]);
+    // Partage du bilan (mail, WhatsApp… via le partage natif du téléphone).
+    if (this.canShare()) {
+      const share = el('button', { class: 'ghost' }, ['Partager']);
+      share.onclick = () => void this.shareBilan(summary, session);
+      actions.append(share);
+    }
+    card.append(actions);
     this.bilan.append(card);
     this.bilan.hidden = false;
+  }
+
+  /** Déroulé de la séance (conversation + tips) pour la relecture de fin. */
+  private buildReview(s: SessionRecord): HTMLElement | null {
+    const entries = s.transcript ?? [];
+    if (!entries.length) return null;
+    const list = el('div', { class: 'review' });
+    for (const e of entries) {
+      if (e.kind === 'user' || e.kind === 'tutor') {
+        list.append(el('div', { class: `r-line r-${e.kind}` }, [e.text]));
+      } else {
+        // correction (coral) / feedback (or) — un conseil intercalé.
+        const tip = el('div', { class: `r-tip r-${e.kind}` }, [el('span', { class: 'r-tip-text', text: e.text })]);
+        if (e.note) tip.append(el('span', { class: 'r-tip-note', text: e.note }));
+        list.append(tip);
+      }
+    }
+    return el('details', { class: 'review-wrap' }, [
+      el('summary', {}, ['Revoir la conversation et les conseils']),
+      list,
+    ]);
+  }
+
+  private canShare(): boolean {
+    return typeof navigator !== 'undefined' && (!!navigator.share || !!navigator.clipboard);
+  }
+
+  /** Partage le bilan en texte (partage natif → mail/WhatsApp ; repli presse-papier). */
+  private async shareBilan(summary: SessionSummary, session: SessionRecord | null): Promise<void> {
+    const text = bilanToText(summary, session);
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'Bilan Loro', text });
+        return;
+      }
+    } catch {
+      /* partage annulé ou refusé : on tente le repli */
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      alert('Bilan copié — colle-le dans un mail ou WhatsApp.');
+    } catch {
+      alert('Partage indisponible sur cet appareil.');
+    }
   }
 
   private metricsLine(s: SessionRecord): HTMLElement {
@@ -607,6 +664,33 @@ export class App {
   private card(title: string, children: (Node | string)[]): HTMLElement {
     return el('div', { class: 'card' }, [el('h2', { text: title }), ...children]);
   }
+}
+
+/** Met le bilan en texte simple, pour le partage (mail / WhatsApp). */
+function bilanToText(summary: SessionSummary, session: SessionRecord | null): string {
+  const L: string[] = ['Bilan de séance — Loro', ''];
+  if (summary.bravo.length) {
+    L.push('👏 Bravo :');
+    for (const b of summary.bravo) L.push(`  • ${b}`);
+    L.push('');
+  }
+  if (summary.resume) L.push(summary.resume, '');
+  if (summary.aTravailler.length) {
+    L.push('À retravailler :');
+    for (const a of summary.aTravailler) L.push(`  • ${a}`);
+    L.push('');
+  }
+  const entries = session?.transcript ?? [];
+  if (entries.length) {
+    L.push('— La conversation et les conseils —', '');
+    for (const e of entries) {
+      if (e.kind === 'user') L.push(`Moi : ${e.text}`);
+      else if (e.kind === 'tutor') L.push(`Prof : ${e.text}`);
+      else if (e.kind === 'correction') L.push(`  ✎ ${e.text}${e.note ? ` (${e.note})` : ''}`);
+      else L.push(`  💡 ${e.text}`);
+    }
+  }
+  return L.join('\n');
 }
 
 /** Score moyen d'une séance + niveau CEFR moyen (0..5), null si aucune notation. */

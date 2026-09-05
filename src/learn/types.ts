@@ -23,6 +23,22 @@ export interface SuccessNote {
   ts: number;
 }
 
+/**
+ * Une ligne du DÉROULÉ de la séance, pour la relecture de fin (PLAN §4). On garde
+ * un journal chronologique de la conversation ET des tips (corrections, avis du
+ * prof), pour pouvoir rejouer à la fin « la conversation avec ses conseils
+ * intercalés » — trop difficiles à lire en direct. Du texte seulement : quelques Ko.
+ */
+export type TranscriptKind = 'user' | 'tutor' | 'correction' | 'feedback';
+
+export interface TranscriptEntry {
+  kind: TranscriptKind;
+  text: string;
+  /** Précision facultative (le « pourquoi » d'une correction). */
+  note?: string;
+  ts: number;
+}
+
 /** Une notation à la volée (evaluate_english_level). */
 export interface Score {
   fluency: number;
@@ -43,6 +59,9 @@ export interface SessionRecord {
   words: WordNote[];
   successes: SuccessNote[];
   scores: Score[];
+  /** Déroulé de la conversation + tips, pour la relecture de fin (facultatif : les
+   * anciennes séances n'en ont pas). */
+  transcript?: TranscriptEntry[];
   /** Renseignés par fin_de_seance. */
   resume?: string;
   aTravailler?: string[];
@@ -84,6 +103,7 @@ export function newSession(scenario: string): SessionRecord {
     words: [],
     successes: [],
     scores: [],
+    transcript: [],
     spokenMs: 0,
     turns: 0,
     newWords: [],
