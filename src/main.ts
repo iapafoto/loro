@@ -176,6 +176,13 @@ if (geminiKey) {
     },
     dispatch: (call) => dispatcher.dispatch(call),
   });
+  // ⚠️ APPLIQUER LES RÉGLAGES ENREGISTRÉS AVANT LA PREMIÈRE SÉANCE. Sans ça, la voix
+  // et surtout le SEUIL DE SILENCE (temps de réflexion) restaient au défaut tant que
+  // l'utilisateur n'avait pas re-touché le curseur — d'où un délai de réponse plus
+  // long que réglé à la première conversation. Les setters ne relancent rien ici
+  // (aucune session encore ouverte) : ils ne font que mémoriser la valeur.
+  void live.setVoice(settings.voice);
+  void live.setSilenceMs(settings.silenceMs);
 }
 
 // --- Interface ---------------------------------------------------------------

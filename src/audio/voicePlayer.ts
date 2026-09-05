@@ -16,6 +16,21 @@ const WATCHDOG_MARGIN_MS = 700;
 const OFF_HANGOVER_MS = 140; // évite le clignotement parle/écoute entre 2 morceaux, sans trop retarder la reprise du micro
 const MAKEUP_GAIN = 3.0; // le PCM de Gemini n'est pas à pleine échelle → on remonte (limiteur derrière)
 
+/**
+ * Anti-clic (les « bips » hérités du player Mochi). Un buffer PCM qui démarre sur
+ * une valeur non nulle claque. Ça arrive au DÉBUT d'une salve de voix — la première
+ * fois, ou après un trou quand un chunk réseau tarde. On lisse de deux façons :
+ *   • START_LEAD_S : un petit coussin avant de jouer le premier chunk d'une salve,
+ *     pour que les suivants aient le temps d'arriver sans sous-alimenter le flux
+ *     (moins de trous, donc moins de clics) — quelques dizaines de ms, inaudible.
+ *   • DECLICK_S : un fondu d'attaque de quelques ms sur ce premier chunk, qui tue le
+ *     claquement résiduel.
+ * EN COURS de salve, les chunks sont contigus échantillon à échantillon : on n'y
+ * touche pas (un fondu y creuserait un trou à chaque jointure).
+ */
+const START_LEAD_S = 0.06;
+const DECLICK_S = 0.005;
+
 export interface VoicePlayerCallbacks {
   /** true dès qu'un morceau est planifié, false quand la file se vide (après hangover). */
   onSpeaking(speaking: boolean): void;
@@ -133,8 +148,20 @@ export class VoicePlayer {
     const src = ctx.createBufferSource();
     src.buffer = buf;
     src.playbackRate.value = this.pitch; // aigu = lecture plus rapide
-    src.connect(this.gain!);
-    const start = Math.max(ctx.currentTime, this.nextTime);
+
+    // Début d'une salve (rien en cours, ou flux sous-alimenté) → coussin + fondu
+    // d'attaque, pour supprimer le clic de démarrage (cf. START_LEAD_S / DECLICK_S).
+    const salveStart = this.nextTime <= ctx.currentTime;
+    const start = salveStart ? ctx.currentTime + START_LEAD_S : this.nextTime;
+    if (salveStart) {
+      const declick = ctx.createGain();
+      declick.gain.setValueAtTime(0.0001, start);
+      declick.gain.linearRampToValueAtTime(1, start + DECLICK_S);
+      src.connect(declick);
+      declick.connect(this.gain!);
+    } else {
+      src.connect(this.gain!);
+    }
     src.start(start);
     this.nextTime = start + buf.duration / this.pitch; // durée réelle = durée / vitesse
 
