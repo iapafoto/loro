@@ -2,8 +2,6 @@ import './style.css';
 import { FaceState, REST_FACE } from './face/faceState';
 import { FaceRenderer } from './face/faceRenderer';
 import { startAutoBlink } from './face/expressions';
-import { MoodEngine, ambientFromMood, restingFaceFromMood } from './affect/mood';
-import { EmoteLayer } from './fx/emotes';
 import { LiveConversation } from './agent/live';
 import { TutorDispatcher, type TutorHandlers, type SessionSummary } from './agent/dispatcher';
 import { assembleSystemInstruction, interlocuteurById, INTERLOCUTEURS, type ScenarioId } from './tutor/persona';
@@ -23,10 +21,6 @@ const renderer = new FaceRenderer(faceCanvas, face);
 renderer.start();
 startAutoBlink(face);
 
-// --- Affect (humeur cumulative + emotes cœurs/étincelles, portés de Mochi) ----
-const emotes = new EmoteLayer(document.getElementById('fx') as HTMLCanvasElement);
-const mood = new MoodEngine();
-
 // --- État ---------------------------------------------------------------------
 const store = new Store();
 let settings = loadSettings();
@@ -34,16 +28,6 @@ let nb: Notebook = store.getNotebook();
 let currentSession: SessionRecord | null = null;
 
 const { key: geminiKey, source: keySource } = loadGeminiKey();
-
-// Emotes centralisées ici pour respecter le réglage `emotes` (désactivable). Toutes
-// les bouffées — réussite, bascule d'humeur, emoji libre choisi par le modèle —
-// passent par ces deux helpers ; à off, rien ne monte à l'écran.
-function spawnEmote(kind: Parameters<EmoteLayer['spawn']>[0]): void {
-  if (settings.emotes) emotes.spawn(kind);
-}
-function spawnEmoji(glyph: string): void {
-  if (settings.emotes) emotes.spawnEmoji(glyph, settings.emoteCount);
-}
 
 // --- Métrique de temps de parole (VAD locale minimale, PLAN §4) --------------
 //
@@ -169,10 +153,6 @@ const handlers: TutorHandlers = {
   },
   noteReussite: (quoi) => {
     currentSession?.successes.push({ quoi, ts: Date.now() });
-    // Une réussite = un vrai moment positif : coup de pouce d'humeur + une bouffée
-    // de cœurs, motivant et fun (demande utilisateur).
-    mood.nudge(0.32, 0.14);
-    spawnEmote('hearts');
     persist();
   },
   ecris: (x) => app.showBoard(x),
@@ -188,15 +168,7 @@ const handlers: TutorHandlers = {
   },
   finDeSeance: (f) => onFinDeSeance(f),
 };
-const dispatcher = new TutorDispatcher(face, handlers, {
-  onEmotion: (emotion, intensity) => mood.nudgeFromEmotion(emotion, intensity),
-  // Emoji libre (outil `emote`) : l'icône monte à l'écran + petit coup de pouce
-  // d'humeur (le prof marque un moment positif).
-  onEmote: (emoji) => {
-    spawnEmoji(emoji);
-    mood.nudge(0.16, 0.1);
-  },
-});
+const dispatcher = new TutorDispatcher(face, handlers);
 
 // --- Session Live ------------------------------------------------------------
 let live: LiveConversation | null = null;
@@ -523,39 +495,8 @@ async function keepAwake(): Promise<void> {
   }
 }
 
-// --- Boucle d'humeur ---------------------------------------------------------
-//
-// Décroissance lente vers la baseline + pilotage de l'affichage : teinte
-// d'ambiance du shader, visage au repos coloré par l'humeur (quand rien d'autre ne
-// l'anime), et emotes automatiques quand l'humeur bascule franchement dans le
-// positif. L'humeur, elle, est nourrie par les expressions du prof (dispatcher) et
-// les réussites (note_reussite).
-let wasHappy = false;
-let lastAutoEmote = 0;
-function startMoodLoop(): void {
-  window.setInterval(() => {
-    mood.step(0.1);
-    const m = mood.mood;
-    renderer.setAmbient(ambientFromMood(m));
-    // Le repos se teinte de l'humeur, mais pas pendant que le prof parle (la synchro
-    // labiale tient la bouche) ni juste après une émotion (on la laisse s'exprimer).
-    if (mood.idleFor > 3 && !tutorSpeaking && mouthRAF === 0) {
-      face.setTarget({ channels: restingFaceFromMood(m), tau: 1.2 });
-    }
-    // Emotes automatiques sur bascule franche vers le positif (anti-spam : 6 s).
-    const now = performance.now() / 1000;
-    const happy = m.valence > 0.6 && m.arousal > 0.5;
-    if (happy && !wasHappy && now - lastAutoEmote > 6) {
-      spawnEmote(Math.random() < 0.5 ? 'hearts' : 'sparkles');
-      lastAutoEmote = now;
-    }
-    wasHappy = happy;
-  }, 100);
-}
-
 // --- Démarrage ---------------------------------------------------------------
 app.setStatus('idle'); // affiche « prêt » ou « ajoute ta clé » dès l'ouverture
-startMoodLoop();
 setupPwa({ log: (line) => console.info('[loro]', line) });
 
 // Premier contact avec l'écran : débloque l'audio (politique d'autoplay). La séance,

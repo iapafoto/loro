@@ -141,15 +141,13 @@ export class App {
     const reglagesTab = el('button', { class: 'icon-btn', 'aria-label': 'Réglages' }, ['⚙']);
     reglagesTab.onclick = () => this.showScreen('reglages');
 
-    // Interrupteur de sous-titres du prof, à portée de main sur l'écran principal
-    // (doublon volontaire du réglage — on veut pouvoir couper/rallumer sans plonger
-    // dans les Réglages). L'état « allumé » est mis en évidence (fond teal).
+    // Sous-titres du prof : bascule à portée de main (en plus du réglage). Actif =
+    // fond teal ; couper efface aussi la ligne affichée.
     this.subToggle = el('button', { class: 'icon-btn', 'aria-label': 'Sous-titres du prof' }, ['💬']) as HTMLButtonElement;
     this.subToggle.onclick = () => {
-      const next: SubtitleMode = this.settings.subtitles === 'off' ? 'on' : 'off';
+      const next: SubtitleMode = this.settings.subtitles === 'off' ? 'bi' : 'off';
       this.patch({ subtitles: next });
       if (next === 'off') clear(this.subtitles);
-      this.syncSubToggle();
     };
 
     const topbar = el('div', { class: 'topbar' }, [carnetTab, this.scenarioSel, this.subToggle, reglagesTab]);
@@ -168,16 +166,15 @@ export class App {
       el('div', { class: 'cefr-wrap' }, [this.cefrBadge]),
     ]);
 
-    // Scène centrale (au-dessus du visage) : l'alerte rouge (qui doit sauter aux
-    // yeux), puis — ancrés vers le BAS, gros et lisibles — le tableau (règles) et les
-    // corrections bleues. Plus d'évaluation orange (supprimée : illisible, parasite).
-    this.alertEl = el('div', { class: 'alert', hidden: true });
+    // Scène centrale (transparente sur le visage)
     this.board = el('div', { class: 'board', hidden: true });
     this.corrections = el('div', { class: 'corrections' });
+    // Bandeau d'alerte (rouge) : coupure/silence du prof, rendu VISIBLE à l'écran —
+    // le statut en bas passe inaperçu quand on regarde le visage.
+    this.alertEl = el('div', { class: 'alert', hidden: true });
     const stage = el('div', { class: 'stage' }, [this.alertEl, this.board, this.corrections]);
 
-    // Sous-titre du prof : SA PROPRE LIGNE RÉSERVÉE en bas (mécanique d'origine,
-    // robuste — jamais escamotée par le tableau ou les corrections).
+    // Sous-titres
     this.subtitles = el('div', { class: 'subtitles' });
 
     // Contrôles
@@ -206,7 +203,7 @@ export class App {
     ]);
   }
 
-  /** Reflète l'état des sous-titres sur le bouton de la barre du haut. */
+  /** Reflète l'état des sous-titres sur le bouton 💬 de la barre du haut. */
   private syncSubToggle(): void {
     const on = this.settings.subtitles !== 'off';
     this.subToggle.classList.toggle('on', on);
@@ -278,9 +275,9 @@ export class App {
   }
 
   setGauge(s: LiveScore): void {
-    // La jauge (barres + niveau) se met à jour SILENCIEUSEMENT ; le retour texte
-    // (ex-bandeau orange) n'est plus affiché en direct — il parasitait le dialogue.
-    // Il reste consigné dans le compte rendu (transcript), lisible à tête reposée.
+    // La jauge (barres + niveau) se met à jour en SILENCE. Le retour texte (l'ancien
+    // bandeau orange) n'est plus affiché en direct : il parasitait le dialogue. Le
+    // feedback reste consigné dans le bilan de fin.
     this.gaugeBars.fluency.style.width = `${Math.round(s.fluency * 100)}%`;
     this.gaugeBars.accuracy.style.width = `${Math.round(s.accuracy * 100)}%`;
     this.gaugeBars.vocabulary.style.width = `${Math.round(s.vocabulary * 100)}%`;
@@ -334,24 +331,20 @@ export class App {
       el('div', { class: 'why', text: card.pourquoi }),
     ]);
     this.corrections.prepend(node);
-    while (this.corrections.children.length > 2) this.corrections.lastChild?.remove();
-    // Reste lisible longtemps : c'est LE point d'accroche pédagogique (le « conseil
-    // bleu »). On lui laisse le temps d'être lu avant de s'effacer en douceur.
-    window.setTimeout(() => node.classList.add('fade'), 22000);
-    window.setTimeout(() => node.remove(), 23000);
+    while (this.corrections.children.length > 3) this.corrections.lastChild?.remove();
+    window.setTimeout(() => node.classList.add('fade'), 12000);
+    window.setTimeout(() => node.remove(), 13000);
   }
 
   /**
-   * Sous-titre du PROF uniquement. La transcription de l'élève n'est plus affichée
-   * (peu fiable — elle partait parfois en caractères CJK) ; elle reste seulement
-   * consignée dans le compte rendu (cf. main.ts logTranscript).
+   * Sous-titre du PROF uniquement, et seulement la DERNIÈRE phrase (pas d'historique
+   * empilé). La transcription de l'élève, peu fiable, n'est plus affichée — elle reste
+   * dans le compte rendu (cf. main.ts). Désactivable (bouton 💬 / réglage Sous-titres).
    */
   addLine(who: 'user' | 'tutor', text: string): void {
-    if (who !== 'tutor') return; // l'élève ne s'affiche plus
+    if (who !== 'tutor') return;
     if (this.settings.subtitles === 'off') return;
     if (!text.trim()) return;
-    // On ne garde que la DERNIÈRE réplique du prof, on n'empile plus : un sous-titre
-    // qui défile en pile détourne l'attention, alors qu'une seule ligne vivante suffit.
     clear(this.subtitles);
     this.subtitles.append(el('div', { class: 'sub sub-tutor' }, [this.tappable(text)]));
   }
@@ -636,43 +629,17 @@ export class App {
       ]),
     );
 
-    // Sous-titres du prof (l'élève n'est plus transcrit à l'écran)
+    // Sous-titres
     const subSel = el('select', { class: 'field' }) as HTMLSelectElement;
     const subOpts: [SubtitleMode, string][] = [
-      ['on', 'Afficher'],
-      ['off', 'Masquer'],
+      ['off', 'Aucun'],
+      ['en', 'Anglais'],
+      ['bi', 'Bilingue'],
     ];
     for (const [val, label] of subOpts) subSel.append(el('option', { value: val }, [label]));
-    subSel.value = s.subtitles === 'off' ? 'off' : 'on';
+    subSel.value = s.subtitles;
     subSel.onchange = () => this.patch({ subtitles: subSel.value as SubtitleMode });
-    this.reglagesBody.append(
-      this.card('Sous-titres du prof', [
-        el('p', { class: 'hint', text: "Le texte de l'élève n'est plus affiché (transcription peu fiable) ; il reste dans le compte rendu de fin." }),
-        subSel,
-      ]),
-    );
-
-    // Emotes / réactions (icônes qui montent au-dessus du visage)
-    const emoteSel = el('select', { class: 'field' }) as HTMLSelectElement;
-    emoteSel.append(el('option', { value: 'on' }, ['Activées']));
-    emoteSel.append(el('option', { value: 'off' }, ['Désactivées']));
-    emoteSel.value = s.emotes ? 'on' : 'off';
-    emoteSel.onchange = () => this.patch({ emotes: emoteSel.value === 'on' });
-    // Nombre d'icônes par réaction (bouffée d'emoji choisie par le prof).
-    const emoteCount = el('input', {
-      type: 'range', min: '1', max: '10', step: '1', value: String(s.emoteCount), class: 'range',
-    }) as HTMLInputElement;
-    const emoteCountVal = el('span', { class: 'range-val', text: `${s.emoteCount}` });
-    emoteCount.oninput = () => (emoteCountVal.textContent = `${emoteCount.value}`);
-    emoteCount.onchange = () => this.patch({ emoteCount: Number(emoteCount.value) });
-    this.reglagesBody.append(
-      this.card('Emotes', [
-        el('p', { class: 'hint', text: 'Petites icônes (cœurs, applaudissements…) que le prof fait monter à l’écran pour encourager.' }),
-        emoteSel,
-        el('p', { class: 'hint', text: 'Nombre d’icônes par réaction :' }),
-        el('div', { class: 'row' }, [emoteCount, emoteCountVal]),
-      ]),
-    );
+    this.reglagesBody.append(this.card('Sous-titres', [subSel]));
 
     // Export / import
     const exportBtn = el('button', { class: 'ghost' }, ['Exporter le carnet']);
@@ -697,7 +664,7 @@ export class App {
   private patch(p: Partial<Settings>): void {
     this.settings = { ...this.settings, ...p };
     this.cb.onSettingsChange(p);
-    if ('subtitles' in p) this.syncSubToggle(); // garde le bouton de la barre en phase
+    if ('subtitles' in p) this.syncSubToggle();
   }
 
   /** Reçoit les réglages courants (après import, p.ex.) pour re-synchroniser les formulaires. */

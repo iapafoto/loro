@@ -106,11 +106,9 @@ export const TUTOR_DECLARATIONS: FunctionDeclaration[] = [
   {
     name: 'ecris',
     description:
-      "LE TABLEAU (visible à l'écran). Affiche un mot, une tournure, ou surtout une RÈGLE / un "
-      + "point de grammaire qu'on vient de voir — pour le VOIR écrit, pas seulement l'entendre. "
-      + "Sers-t'en RÉGULIÈREMENT, comme un prof écrit au tableau : un mot nouveau, une expression "
-      + "idiomatique, et dès que tu expliques une règle (ex. « present perfect : have + participe "
-      + "passé »), mets-la ici en une ligne claire. C'est SILENCIEUX et n'interrompt pas.",
+      'LE TABLEAU. Affiche à l’écran un mot ou une phrase qu’on vient d’entendre — pour le VOIR '
+      + 'écrit, pas seulement l’entendre. À utiliser quand l’orthographe aide (un mot nouveau, une '
+      + 'expression idiomatique, une tournure à retenir).',
     parameters: {
       type: 'object',
       properties: {
@@ -128,11 +126,9 @@ export const TUTOR_DECLARATIONS: FunctionDeclaration[] = [
   {
     name: 'corrige',
     description:
-      "CARTE DE CORRECTION BLEUE (visible à l'écran) + journal. Affiche-la RÉGULIÈREMENT : à "
-      + "peu près chaque fois que tu reprends vraiment une tournure — surtout si tu la corriges "
-      + "à voix haute — pour que l'élève VOIE la correction, pas seulement l'entende. C'est "
-      + "l'ancrage visuel du cours. Montre la forme fautive, la forme correcte, et pourquoi en "
-      + "une ligne. (Inutile pour une broutille corrigée en passant par simple reformulation.)",
+      'CARTE DE CORRECTION (visible) + journal. À réserver à ce qui SE RÉPÈTE ou qui compte '
+      + 'vraiment : le reste se corrige par reformulation naturelle, sans s’arrêter. Montre la '
+      + 'forme fautive, la forme correcte, et pourquoi, en une ligne.',
     parameters: {
       type: 'object',
       properties: {
@@ -209,26 +205,6 @@ export const TUTOR_DECLARATIONS: FunctionDeclaration[] = [
         intensity: { type: 'number', minimum: 0, maximum: 1, description: 'Intensité 0-1 (défaut 0.8).' },
       },
       required: ['emotion'],
-    },
-  },
-  {
-    name: 'emote',
-    description:
-      "RÉACTION VISUELLE : fais MONTER une petite icône emoji au-dessus du visage (cœurs, "
-      + "pouce, étincelles, applaudissements…). Purement décoratif et ENCOURAGEANT — ne "
-      + "l'annonce pas, n'en parle pas. Choisis TOI l'emoji qui colle au moment (👏 pour une "
-      + "belle phrase, ❤️ pour un bel effort, ✨ pour un progrès, 🤔 pour une hésitation, 💪 pour "
-      + "un encouragement). Reste SOBRE : une réaction de temps en temps sur un vrai moment, "
-      + "PAS à chaque réplique — sinon ça sature l'écran.",
-    parameters: {
-      type: 'object',
-      properties: {
-        emoji: {
-          type: 'string',
-          description: 'Un seul caractère emoji (ex. 👏, ❤️, ✨, 👍, 🎉, 🤔, 💪).',
-        },
-      },
-      required: ['emoji'],
     },
   },
   {

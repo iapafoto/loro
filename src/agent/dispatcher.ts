@@ -51,20 +51,12 @@ export interface DispatchResult {
 
 const ERROR_TYPES: readonly ErrorType[] = ['grammaire', 'vocabulaire', 'prononciation', 'registre'];
 
-/** Effets affectifs branchés par main.ts (humeur cumulative + emotes). */
-export interface AffectSink {
-  onEmotion(emotion: Emotion, intensity: number): void;
-  /** Emoji libre choisi par le modèle (outil `emote`) → icône qui monte à l'écran. */
-  onEmote(emoji: string): void;
-}
-
 export class TutorDispatcher {
   private browTimer: number | null = null;
 
   constructor(
     private readonly face: FaceState,
     private readonly h: TutorHandlers,
-    private readonly affect?: AffectSink,
   ) {}
 
   dispatch(call: ToolCall): DispatchResult {
@@ -127,15 +119,8 @@ export class TutorDispatcher {
       // --- EXPRESSION -------------------------------------------------------
       case 'express': {
         const emotion = String(a.emotion ?? 'neutral') as Emotion;
-        const intensity = clamp01(num(a.intensity, 0.8));
-        express(this.face, emotion, intensity);
-        this.affect?.onEmotion(emotion, intensity); // l'émotion fait évoluer l'humeur
+        express(this.face, emotion, clamp01(num(a.intensity, 0.8)));
         return ok(emotion);
-      }
-      case 'emote': {
-        const emoji = str(a.emoji).trim();
-        if (emoji) this.affect?.onEmote(emoji);
-        return ok(emoji || 'emote vide');
       }
       case 'look': {
         look(this.face, String(a.dir ?? 'center') as LookDir);

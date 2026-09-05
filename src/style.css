@@ -45,10 +45,6 @@ body {
   display: block;
   z-index: 0;
 }
-/* Emotes au-dessus du visage mais sous l'UI, et transparentes aux taps. */
-#fx {
-  pointer-events: none;
-}
 
 #wake {
   position: fixed;
@@ -100,7 +96,7 @@ body {
   font-size: 16px;
   cursor: pointer;
 }
-/* Bouton bascule allumé (ex. sous-titres actifs) : mis en évidence. */
+/* Bouton bascule allumé (sous-titres actifs). */
 .icon-btn.on {
   background: var(--teal);
   border-color: var(--teal);
@@ -160,25 +156,22 @@ body {
 }
 
 /* --- Scène centrale --- */
-/* Scène : contenu ancré vers le BAS (juste au-dessus du sous-titre), gros et
-   lisible, tout en laissant le visage occuper le haut. */
 .stage {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
+  justify-content: center;
+  gap: 10px;
   min-height: 0;
 }
 .board {
   pointer-events: auto;
-  align-self: center;
   background: rgba(4, 32, 43, 0.82);
   border: 1px solid var(--teal);
   border-radius: 14px;
   padding: 14px 18px;
   text-align: center;
-  max-width: 100%;
+  max-width: 90%;
   transition: opacity 0.8s;
 }
 .board.fade {
@@ -202,39 +195,36 @@ body {
   font-weight: 600;
 }
 .board-mot {
-  font-size: 30px;
+  font-size: 26px;
 }
 .board-phrase {
-  font-size: 23px;
+  font-size: 19px;
 }
 .board-tr {
   color: var(--muted);
-  font-size: 15px;
+  font-size: 13px;
   margin-top: 6px;
 }
 .board-list {
   margin: 0;
   padding-left: 18px;
   text-align: left;
-  font-size: 19px;
 }
 
 .corrections {
   pointer-events: auto;
-  align-self: center;
   display: flex;
   flex-direction: column;
   gap: 6px;
   width: 100%;
-  max-width: 520px;
+  max-width: 420px;
 }
 .correction {
-  background: rgba(4, 40, 52, 0.92);
-  border: 1px solid rgba(46, 196, 182, 0.5);
-  border-left: 4px solid var(--teal);
-  border-radius: 10px;
-  padding: 10px 12px;
-  font-size: 17px;
+  background: rgba(30, 10, 20, 0.85);
+  border-left: 3px solid var(--coral);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
   transition: opacity 0.8s;
 }
 .correction.fade {
@@ -254,11 +244,11 @@ body {
 }
 .correction .why {
   color: var(--muted);
-  font-size: 14px;
+  font-size: 12px;
   margin-top: 3px;
 }
 
-/* --- Sous-titre du prof : ligne dédiée en bas, gros --- */
+/* --- Sous-titres --- */
 .subtitles {
   max-height: 22vh;
   overflow-y: auto;
@@ -267,15 +257,18 @@ body {
   gap: 4px;
 }
 .sub {
-  padding: 8px 12px;
-  border-radius: 12px;
-  font-size: 18px;
-  line-height: 1.35;
-  max-width: 96%;
+  padding: 4px 10px;
+  border-radius: 10px;
+  font-size: 14px;
+  max-width: 90%;
+}
+.sub-user {
+  align-self: flex-end;
+  background: rgba(46, 196, 182, 0.16);
 }
 .sub-tutor {
   align-self: flex-start;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.07);
 }
 .word {
   cursor: pointer;

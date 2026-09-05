@@ -6,10 +6,7 @@ import { DEFAULT_SILENCE_MS } from './agent/liveConfig';
 import { DEFAULT_VOICE } from './agent/live';
 import { DEFAULT_INTERLOCUTEUR, type InterlocuteurId, type ScenarioId } from './tutor/persona';
 
-// Sous-titres : uniquement ceux du PROF (la transcription de l'élève, peu fiable —
-// elle partait parfois en caractères CJK — n'est plus affichée, seulement gardée
-// dans le compte rendu). Simple bascule marche/arrêt.
-export type SubtitleMode = 'off' | 'on';
+export type SubtitleMode = 'off' | 'en' | 'bi';
 
 export interface Settings {
   /** Interlocuteur choisi (partenaire pro, prof d'anglais, prof d'espagnol). */
@@ -19,10 +16,6 @@ export interface Settings {
   job: string;
   scenario: ScenarioId;
   subtitles: SubtitleMode;
-  /** Emotes/réactions (icônes qui montent au-dessus du visage). Désactivable. */
-  emotes: boolean;
-  /** Nombre d'icônes par réaction du prof (emoji libre), 1-10. */
-  emoteCount: number;
 }
 
 const SETTINGS_KEY = 'loro.settings';
@@ -34,9 +27,7 @@ export function defaultSettings(): Settings {
     silenceMs: DEFAULT_SILENCE_MS,
     job: '',
     scenario: 'libre',
-    subtitles: 'on',
-    emotes: true,
-    emoteCount: 3,
+    subtitles: 'bi',
   };
 }
 
