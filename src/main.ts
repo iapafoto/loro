@@ -88,14 +88,12 @@ const CONCLUDE_FALLBACK_MS = 15000; // si le prof n'appelle pas fin_de_seance, o
 // et après chaque tour de l'élève) ; il est DÉSARMÉ dès que le prof produit quoi que
 // ce soit. S'il expire, on affiche un bandeau rouge — sinon la panne est invisible.
 let responseWatch = 0;
-const RESPONSE_TIMEOUT_MS = 11000;
-// Détection LOCALE de fin de tour de l'élève, indépendante du serveur : si le modèle
-// se tait sans même renvoyer de fin de tour, aucun callback serveur n'arrive — c'est
-// le micro qui doit dire « l'élève a parlé puis s'est tu, une réponse est due ».
-let awaitingReply = false;
-let userLastLoudMs = 0;
-const USER_LOUD_THRESHOLD = 0.06; // même ordre que SpeechMeter
-const USER_TURN_GAP_MS = 600; // silence après lequel on considère le tour fini
+const RESPONSE_TIMEOUT_MS = 14000;
+// On n'attend une réponse QUE si un VRAI tour de l'élève vient de se clore. On
+// s'appuie sur le compteur de tours de la VAD (SpeechMeter : ≥400 ms de parole,
+// ≥400 ms de silence) — pas sur un pic isolé, sinon un bruit ou une respiration
+// armait le guet et l'alerte rouge tombait alors que tout allait bien.
+let lastTurns = 0;
 function armResponseWatch(): void {
   clearResponseWatch();
   responseWatch = window.setTimeout(() => {
@@ -114,7 +112,6 @@ function clearResponseWatch(): void {
 /** Le prof a produit quelque chose : la session répond → on désarme et on efface l'alerte. */
 function tutorResponded(): void {
   clearResponseWatch();
-  awaitingReply = false;
   app.clearAlert();
 }
 
@@ -211,16 +208,12 @@ if (geminiKey) {
       // On ne compte le temps de parole que quand le prof se TAIT : sinon sa propre
       // voix (que le micro entend malgré l'annulation d'écho) gonflerait le compteur.
       if (!tutorSpeaking) meter.push(peak);
-      // Guet « pas de réponse » : l'élève parle (fort) puis se tait → on arme, une
-      // réponse est attendue. Désarmé dès que le prof produit quoi que ce soit
-      // (tutorResponded). Ne s'arme jamais dans le silence : pas de faux positif.
-      if (tutorSpeaking) return;
-      if (peak > USER_LOUD_THRESHOLD) {
-        userLastLoudMs = Date.now();
-        awaitingReply = true;
-      } else if (awaitingReply && Date.now() - userLastLoudMs > USER_TURN_GAP_MS) {
-        awaitingReply = false;
-        armResponseWatch();
+      // Guet « pas de réponse » : armé UNIQUEMENT quand un vrai tour de l'élève vient
+      // de se clore (meter.turns, filtré du bruit). Désarmé dès que le prof répond
+      // (tutorResponded). Le silence pur n'arme rien → plus de fausse alerte rouge.
+      if (meter.turns > lastTurns) {
+        lastTurns = meter.turns;
+        if (!tutorSpeaking) armResponseWatch();
       }
     },
     onStalled: (reason) => console.warn('[loro] voix débloquée :', reason),
@@ -361,7 +354,7 @@ async function startLive(): Promise<void> {
   greeted = false; // l'accueil (onReady) resalue à la première ouverture de CETTE séance
   clearConclusion();
   clearResponseWatch();
-  awaitingReply = false;
+  lastTurns = 0;
   app.clearAlert();
   void keepAwake();
   await live.start(buildSystem());

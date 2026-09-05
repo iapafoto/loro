@@ -145,7 +145,12 @@ export const TUTOR_DECLARATIONS: FunctionDeclaration[] = [
       'LA JAUGE LIVE. Estime le niveau de l’élève d’après ce que tu viens d’entendre. Appelle-la '
       + 'TOUTES LES 2-3 RÉPLIQUES, et tout de suite si l’élève la demande — dans ce cas mets 0 '
       + 'partout si tu n’as pas encore de quoi juger, plutôt que de sauter l’appel. C’est ce qui '
-      + 'fait bouger la jauge pendant la conversation.',
+      + 'fait bouger la jauge pendant la conversation. '
+      + 'SOIS CALIBRÉ, PAS COMPLAISANT : note ce que tu entends VRAIMENT, pas ce qui ferait '
+      + 'plaisir. Un quasi-débutant (phrases très courtes, fautes de base, hésitations, passages '
+      + 'en français) = A1 avec des scores BAS (0,1–0,3). Un niveau scolaire moyen = A2/B1 (0,3–0,5). '
+      + 'Réserve 0,7+ et B2/C1 à une aisance réelle et soutenue. Encourageant dans le TON (feedback), '
+      + 'HONNÊTE dans les chiffres — une jauge gonflée ne rend pas service.',
     parameters: {
       type: 'object',
       properties: {
