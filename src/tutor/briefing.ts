@@ -141,7 +141,16 @@ export interface BriefingOptions {
   profileName: string;
   /** Le métier de l'élève en une phrase (réglages). */
   job?: string;
+  /**
+   * Cadre d'apprentissage en tête de fiche — dépend de l'interlocuteur choisi
+   * (cf. persona.ts, `Interlocuteur.enteteFiche`). C'est ce cadre qui disait
+   * « déplacements clients à l'international », d'où les fausses réunions au bonjour :
+   * on le laisse piloter par l'appelant. Défaut : le cadre « pro » historique.
+   */
+  enteteFiche?: string;
 }
+
+const ENTETE_PAR_DEFAUT = "Anglais professionnel, déplacements clients à l'international.";
 
 /**
  * Compile le carnet en un bloc COURT injecté dans le `systemInstruction` (PLAN §3).
@@ -155,9 +164,7 @@ export interface BriefingOptions {
  */
 export function compileBriefing(nb: Notebook, opts: BriefingOptions): string {
   const lines: string[] = [];
-  lines.push(
-    `FICHE ÉLÈVE — ${opts.profileName}. Anglais professionnel, déplacements clients à l'international.`,
-  );
+  lines.push(`FICHE ÉLÈVE — ${opts.profileName}. ${opts.enteteFiche ?? ENTETE_PAR_DEFAUT}`);
   if (opts.job?.trim()) lines.push(`Métier : ${opts.job.trim()}.`);
 
   const bravo = latestSuccess(nb);

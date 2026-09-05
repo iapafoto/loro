@@ -4,11 +4,13 @@
 
 import { DEFAULT_SILENCE_MS } from './agent/liveConfig';
 import { DEFAULT_VOICE } from './agent/live';
-import type { ScenarioId } from './tutor/persona';
+import { DEFAULT_INTERLOCUTEUR, type InterlocuteurId, type ScenarioId } from './tutor/persona';
 
 export type SubtitleMode = 'off' | 'en' | 'bi';
 
 export interface Settings {
+  /** Interlocuteur choisi (partenaire pro, prof d'anglais, prof d'espagnol). */
+  interlocuteur: InterlocuteurId;
   voice: string;
   silenceMs: number;
   job: string;
@@ -20,6 +22,7 @@ const SETTINGS_KEY = 'loro.settings';
 
 export function defaultSettings(): Settings {
   return {
+    interlocuteur: DEFAULT_INTERLOCUTEUR,
     voice: DEFAULT_VOICE,
     silenceMs: DEFAULT_SILENCE_MS,
     job: '',

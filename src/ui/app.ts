@@ -7,7 +7,7 @@
 // L'App ne fait que du RENDU et remonte des callbacks ; main.ts tient la logique.
 
 import { el, clear, svgEl } from './dom';
-import { SCENARIOS, type ScenarioId } from '../tutor/persona';
+import { SCENARIOS, INTERLOCUTEURS } from '../tutor/persona';
 import { LIVE_VOICES } from '../agent/live';
 import type { LiveStatus } from '../agent/live';
 import type { KeySource } from '../agent/apiKey';
@@ -21,7 +21,12 @@ export type Screen = 'conversation' | 'carnet' | 'reglages';
 
 export interface AppCallbacks {
   onStartStop(): void;
-  onScenarioChange(id: ScenarioId): void;
+  /**
+   * Choix dans le menu du haut. La valeur est soit un scénario (partenaire pro),
+   * soit un interlocuteur autonome ('prof-anglais', 'prof-espagnol'). main.ts en
+   * déduit l'interlocuteur ET le scénario.
+   */
+  onModeChange(value: string): void;
   onSettingsChange(patch: Partial<Settings>): void;
   onProfileChange(id: string): void;
   onAddProfile(name: string): void;
@@ -107,13 +112,20 @@ export class App {
   }
 
   private buildConversation(): HTMLElement {
-    // Barre du haut
-    this.scenarioSel = el('select', { class: 'scenario', 'aria-label': 'Scénario' }) as HTMLSelectElement;
-    for (const s of SCENARIOS) {
-      this.scenarioSel.append(el('option', { value: s.id }, [s.label]));
+    // Barre du haut — UN seul menu : les scénarios (avec le partenaire pro), puis
+    // les profs autonomes (anglais, espagnol). La valeur est un ScenarioId OU un
+    // InterlocuteurId ; main.ts démêle les deux (cf. onModeChange).
+    this.scenarioSel = el('select', { class: 'scenario', 'aria-label': 'Mode' }) as HTMLSelectElement;
+    const grpPro = el('optgroup', { label: 'Partenaire pro (anglais)' });
+    for (const s of SCENARIOS) grpPro.append(el('option', { value: s.id }, [s.label]));
+    const grpCours = el('optgroup', { label: 'Cours de langue' });
+    for (const i of INTERLOCUTEURS) {
+      if (i.id === 'pro') continue; // le « pro » est déjà représenté par ses scénarios
+      grpCours.append(el('option', { value: i.id }, [i.label]));
     }
-    this.scenarioSel.value = this.settings.scenario;
-    this.scenarioSel.onchange = () => this.cb.onScenarioChange(this.scenarioSel.value as ScenarioId);
+    this.scenarioSel.append(grpPro, grpCours);
+    this.scenarioSel.value = this.comboValue();
+    this.scenarioSel.onchange = () => this.cb.onModeChange(this.scenarioSel.value);
 
     const carnetTab = el('button', { class: 'icon-btn', 'aria-label': 'Carnet' }, ['📓']);
     carnetTab.onclick = () => this.showScreen('carnet');
@@ -543,8 +555,16 @@ export class App {
   /** Reçoit les réglages courants (après import, p.ex.) pour re-synchroniser les formulaires. */
   setSettings(s: Settings): void {
     this.settings = s;
-    this.scenarioSel.value = s.scenario;
+    this.scenarioSel.value = this.comboValue();
     if (!this.screens.reglages.hidden) this.renderReglages();
+  }
+
+  /**
+   * Valeur du menu du haut : l'interlocuteur s'il n'est pas le partenaire « pro »
+   * (prof d'anglais/espagnol), sinon le scénario en cours.
+   */
+  private comboValue(): string {
+    return this.settings.interlocuteur !== 'pro' ? this.settings.interlocuteur : this.settings.scenario;
   }
 
   private card(title: string, children: (Node | string)[]): HTMLElement {

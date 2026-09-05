@@ -4,7 +4,7 @@ import { FaceRenderer } from './face/faceRenderer';
 import { startAutoBlink } from './face/expressions';
 import { LiveConversation } from './agent/live';
 import { TutorDispatcher, type TutorHandlers, type SessionSummary } from './agent/dispatcher';
-import { assembleSystemInstruction } from './tutor/persona';
+import { assembleSystemInstruction, interlocuteurById, INTERLOCUTEURS, type ScenarioId } from './tutor/persona';
 import { compileBriefing } from './tutor/briefing';
 import { Store } from './learn/store';
 import { newSession, type Notebook, type SessionRecord } from './learn/types';
@@ -172,12 +172,7 @@ if (geminiKey) {
       // et on ne veut re-saluer qu'à la première ouverture.
       if (greeted) return;
       greeted = true;
-      live?.notify(
-        "la séance commence. Accueille l'élève chaleureusement EN ANGLAIS, une à deux phrases. "
-          + "Si sa fiche montre une réussite de la dernière fois, ouvre dessus pour l'encourager "
-          + '(sans réciter la fiche ni parler de tes outils). Puis lance la conversation par une '
-          + 'question ouverte.',
-      );
+      live?.notify(interlocuteurById(settings.interlocuteur).accueil);
     },
     dispatch: (call) => dispatcher.dispatch(call),
   });
@@ -201,8 +196,16 @@ const app = new App({
         void hardStop(); // 2e Stop : arrêt immédiat (échappatoire)
       }
     },
-    onScenarioChange: (id) => {
-      settings = { ...settings, scenario: id };
+    onModeChange: (value) => {
+      // Le menu du haut mêle scénarios (partenaire pro) et profs autonomes. Un id
+      // d'interlocuteur non-« pro » (prof-anglais, prof-espagnol) sélectionne ce
+      // prof en conversation libre ; sinon c'est un scénario, joué par le pro.
+      const inter = INTERLOCUTEURS.find((i) => i.id === value && i.id !== 'pro');
+      if (inter) {
+        settings = { ...settings, interlocuteur: inter.id, scenario: 'libre' };
+      } else {
+        settings = { ...settings, interlocuteur: 'pro', scenario: value as ScenarioId };
+      }
       saveSettings(settings);
     },
     onSettingsChange: (patch) => {
@@ -249,8 +252,17 @@ const app = new App({
 /** Construit le system prompt du jour : persona + scénario + fiche élève (briefing). */
 function buildSystem(): string {
   nb = store.getNotebook();
-  const fiche = compileBriefing(nb, { profileName: store.getActiveProfile().name, job: settings.job });
-  return assembleSystemInstruction({ scenario: settings.scenario, ficheEleve: fiche });
+  const inter = interlocuteurById(settings.interlocuteur);
+  const fiche = compileBriefing(nb, {
+    profileName: store.getActiveProfile().name,
+    job: settings.job,
+    enteteFiche: inter.enteteFiche,
+  });
+  return assembleSystemInstruction({
+    interlocuteur: settings.interlocuteur,
+    scenario: settings.scenario,
+    ficheEleve: fiche,
+  });
 }
 
 async function startLive(): Promise<void> {
