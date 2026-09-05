@@ -42,7 +42,7 @@ function spawnEmote(kind: Parameters<EmoteLayer['spawn']>[0]): void {
   if (settings.emotes) emotes.spawn(kind);
 }
 function spawnEmoji(glyph: string): void {
-  if (settings.emotes) emotes.spawnEmoji(glyph);
+  if (settings.emotes) emotes.spawnEmoji(glyph, settings.emoteCount);
 }
 
 // --- Métrique de temps de parole (VAD locale minimale, PLAN §4) --------------

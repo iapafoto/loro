@@ -21,6 +21,8 @@ export interface Settings {
   subtitles: SubtitleMode;
   /** Emotes/réactions (icônes qui montent au-dessus du visage). Désactivable. */
   emotes: boolean;
+  /** Nombre d'icônes par réaction du prof (emoji libre), 1-10. */
+  emoteCount: number;
 }
 
 const SETTINGS_KEY = 'loro.settings';
@@ -34,6 +36,7 @@ export function defaultSettings(): Settings {
     scenario: 'libre',
     subtitles: 'on',
     emotes: true,
+    emoteCount: 3,
   };
 }
 

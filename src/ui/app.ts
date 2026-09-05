@@ -68,6 +68,7 @@ export class App {
   private statusEl!: HTMLElement;
   private micBar!: HTMLElement;
   private scenarioSel!: HTMLSelectElement;
+  private subToggle!: HTMLButtonElement;
   private board!: HTMLElement;
   private boardTimer = 0;
   private corrections!: HTMLElement;
@@ -140,7 +141,18 @@ export class App {
     const reglagesTab = el('button', { class: 'icon-btn', 'aria-label': 'Réglages' }, ['⚙']);
     reglagesTab.onclick = () => this.showScreen('reglages');
 
-    const topbar = el('div', { class: 'topbar' }, [carnetTab, this.scenarioSel, reglagesTab]);
+    // Interrupteur de sous-titres du prof, à portée de main sur l'écran principal
+    // (doublon volontaire du réglage — on veut pouvoir couper/rallumer sans plonger
+    // dans les Réglages). L'état « allumé » est mis en évidence (fond teal).
+    this.subToggle = el('button', { class: 'icon-btn', 'aria-label': 'Sous-titres du prof' }, ['💬']) as HTMLButtonElement;
+    this.subToggle.onclick = () => {
+      const next: SubtitleMode = this.settings.subtitles === 'off' ? 'on' : 'off';
+      this.patch({ subtitles: next });
+      if (next === 'off') clear(this.subtitles);
+      this.syncSubToggle();
+    };
+
+    const topbar = el('div', { class: 'topbar' }, [carnetTab, this.scenarioSel, this.subToggle, reglagesTab]);
 
     // Jauge live (3 barres + CEFR)
     this.gaugeBars = {
@@ -156,19 +168,17 @@ export class App {
       el('div', { class: 'cefr-wrap' }, [this.cefrBadge]),
     ]);
 
-    // Scène centrale : volontairement dégagée pour laisser voir le visage. Seul le
-    // bandeau d'alerte rouge (coupure/silence du prof) y flotte, car il doit sauter
-    // aux yeux — le statut en bas passe inaperçu quand on regarde le prof.
+    // Scène centrale (au-dessus du visage) : l'alerte rouge (qui doit sauter aux
+    // yeux), puis — ancrés vers le BAS, gros et lisibles — le tableau (règles) et les
+    // corrections bleues. Plus d'évaluation orange (supprimée : illisible, parasite).
     this.alertEl = el('div', { class: 'alert', hidden: true });
-    const stage = el('div', { class: 'stage' }, [this.alertEl]);
-
-    // Bande basse (« dock ») : tout ce qui se LIT est regroupé ici, en bas et en
-    // GROS — le tableau (règles), les corrections bleues, puis le sous-titre du prof.
-    // On a libéré la place en supprimant l'évaluation orange (peu lisible, parasite).
     this.board = el('div', { class: 'board', hidden: true });
     this.corrections = el('div', { class: 'corrections' });
+    const stage = el('div', { class: 'stage' }, [this.alertEl, this.board, this.corrections]);
+
+    // Sous-titre du prof : SA PROPRE LIGNE RÉSERVÉE en bas (mécanique d'origine,
+    // robuste — jamais escamotée par le tableau ou les corrections).
     this.subtitles = el('div', { class: 'subtitles' });
-    const dock = el('div', { class: 'dock' }, [this.board, this.corrections, this.subtitles]);
 
     // Contrôles
     this.micBtn = el('button', { class: 'mic', 'aria-label': 'Démarrer' }, ['Parler']);
@@ -184,14 +194,24 @@ export class App {
     // Overlay de bilan
     this.bilan = el('div', { class: 'bilan', hidden: true });
 
+    this.syncSubToggle();
+
     return el('section', { class: 'screen screen-convo' }, [
       topbar,
       gauge,
       stage,
-      dock,
+      this.subtitles,
       controls,
       this.bilan,
     ]);
+  }
+
+  /** Reflète l'état des sous-titres sur le bouton de la barre du haut. */
+  private syncSubToggle(): void {
+    const on = this.settings.subtitles !== 'off';
+    this.subToggle.classList.toggle('on', on);
+    this.subToggle.setAttribute('aria-pressed', String(on));
+    this.subToggle.title = on ? 'Sous-titres du prof : affichés' : 'Sous-titres du prof : masqués';
   }
 
   private gaugeRow(label: string, fill: HTMLElement): HTMLElement {
@@ -314,9 +334,11 @@ export class App {
       el('div', { class: 'why', text: card.pourquoi }),
     ]);
     this.corrections.prepend(node);
-    while (this.corrections.children.length > 3) this.corrections.lastChild?.remove();
-    window.setTimeout(() => node.classList.add('fade'), 12000);
-    window.setTimeout(() => node.remove(), 13000);
+    while (this.corrections.children.length > 2) this.corrections.lastChild?.remove();
+    // Reste lisible longtemps : c'est LE point d'accroche pédagogique (le « conseil
+    // bleu »). On lui laisse le temps d'être lu avant de s'effacer en douceur.
+    window.setTimeout(() => node.classList.add('fade'), 22000);
+    window.setTimeout(() => node.remove(), 23000);
   }
 
   /**
@@ -328,10 +350,10 @@ export class App {
     if (who !== 'tutor') return; // l'élève ne s'affiche plus
     if (this.settings.subtitles === 'off') return;
     if (!text.trim()) return;
-    const line = el('div', { class: 'sub sub-tutor' }, [this.tappable(text)]);
-    this.subtitles.append(line);
-    while (this.subtitles.children.length > 3) this.subtitles.firstChild?.remove();
-    this.subtitles.scrollTop = this.subtitles.scrollHeight;
+    // On ne garde que la DERNIÈRE réplique du prof, on n'empile plus : un sous-titre
+    // qui défile en pile détourne l'attention, alors qu'une seule ligne vivante suffit.
+    clear(this.subtitles);
+    this.subtitles.append(el('div', { class: 'sub sub-tutor' }, [this.tappable(text)]));
   }
 
   /** Rend chaque mot tappable : un tap → traduction + ajout au carnet (PLAN §4). */
@@ -636,10 +658,19 @@ export class App {
     emoteSel.append(el('option', { value: 'off' }, ['Désactivées']));
     emoteSel.value = s.emotes ? 'on' : 'off';
     emoteSel.onchange = () => this.patch({ emotes: emoteSel.value === 'on' });
+    // Nombre d'icônes par réaction (bouffée d'emoji choisie par le prof).
+    const emoteCount = el('input', {
+      type: 'range', min: '1', max: '10', step: '1', value: String(s.emoteCount), class: 'range',
+    }) as HTMLInputElement;
+    const emoteCountVal = el('span', { class: 'range-val', text: `${s.emoteCount}` });
+    emoteCount.oninput = () => (emoteCountVal.textContent = `${emoteCount.value}`);
+    emoteCount.onchange = () => this.patch({ emoteCount: Number(emoteCount.value) });
     this.reglagesBody.append(
       this.card('Emotes', [
         el('p', { class: 'hint', text: 'Petites icônes (cœurs, applaudissements…) que le prof fait monter à l’écran pour encourager.' }),
         emoteSel,
+        el('p', { class: 'hint', text: 'Nombre d’icônes par réaction :' }),
+        el('div', { class: 'row' }, [emoteCount, emoteCountVal]),
       ]),
     );
 
@@ -666,12 +697,14 @@ export class App {
   private patch(p: Partial<Settings>): void {
     this.settings = { ...this.settings, ...p };
     this.cb.onSettingsChange(p);
+    if ('subtitles' in p) this.syncSubToggle(); // garde le bouton de la barre en phase
   }
 
   /** Reçoit les réglages courants (après import, p.ex.) pour re-synchroniser les formulaires. */
   setSettings(s: Settings): void {
     this.settings = s;
     this.scenarioSel.value = this.comboValue();
+    this.syncSubToggle();
     if (!this.screens.reglages.hidden) this.renderReglages();
   }
 

@@ -106,9 +106,11 @@ export const TUTOR_DECLARATIONS: FunctionDeclaration[] = [
   {
     name: 'ecris',
     description:
-      'LE TABLEAU. Affiche à l’écran un mot ou une phrase qu’on vient d’entendre — pour le VOIR '
-      + 'écrit, pas seulement l’entendre. À utiliser quand l’orthographe aide (un mot nouveau, une '
-      + 'expression idiomatique, une tournure à retenir).',
+      "LE TABLEAU (visible à l'écran). Affiche un mot, une tournure, ou surtout une RÈGLE / un "
+      + "point de grammaire qu'on vient de voir — pour le VOIR écrit, pas seulement l'entendre. "
+      + "Sers-t'en RÉGULIÈREMENT, comme un prof écrit au tableau : un mot nouveau, une expression "
+      + "idiomatique, et dès que tu expliques une règle (ex. « present perfect : have + participe "
+      + "passé »), mets-la ici en une ligne claire. C'est SILENCIEUX et n'interrompt pas.",
     parameters: {
       type: 'object',
       properties: {
@@ -126,9 +128,11 @@ export const TUTOR_DECLARATIONS: FunctionDeclaration[] = [
   {
     name: 'corrige',
     description:
-      'CARTE DE CORRECTION (visible) + journal. À réserver à ce qui SE RÉPÈTE ou qui compte '
-      + 'vraiment : le reste se corrige par reformulation naturelle, sans s’arrêter. Montre la '
-      + 'forme fautive, la forme correcte, et pourquoi, en une ligne.',
+      "CARTE DE CORRECTION BLEUE (visible à l'écran) + journal. Affiche-la RÉGULIÈREMENT : à "
+      + "peu près chaque fois que tu reprends vraiment une tournure — surtout si tu la corriges "
+      + "à voix haute — pour que l'élève VOIE la correction, pas seulement l'entende. C'est "
+      + "l'ancrage visuel du cours. Montre la forme fautive, la forme correcte, et pourquoi en "
+      + "une ligne. (Inutile pour une broutille corrigée en passant par simple reformulation.)",
     parameters: {
       type: 'object',
       properties: {

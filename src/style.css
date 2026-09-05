@@ -100,6 +100,11 @@ body {
   font-size: 16px;
   cursor: pointer;
 }
+/* Bouton bascule allumé (ex. sous-titres actifs) : mis en évidence. */
+.icon-btn.on {
+  background: var(--teal);
+  border-color: var(--teal);
+}
 .scenario {
   flex: 1;
   background: rgba(18, 50, 74, 0.7);
@@ -155,26 +160,15 @@ body {
 }
 
 /* --- Scène centrale --- */
+/* Scène : contenu ancré vers le BAS (juste au-dessus du sous-titre), gros et
+   lisible, tout en laissant le visage occuper le haut. */
 .stage {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
-  min-height: 0;
-}
-
-/* --- Bande basse : tout ce qui se lit, en bas et en gros --- */
-.dock {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
+  justify-content: flex-end;
   gap: 8px;
   min-height: 0;
-  pointer-events: none; /* le fond laisse voir le visage ; chaque bloc réactive */
-}
-.dock > * {
-  pointer-events: auto;
 }
 .board {
   pointer-events: auto;
@@ -235,9 +229,10 @@ body {
   max-width: 520px;
 }
 .correction {
-  background: rgba(30, 10, 20, 0.9);
-  border-left: 4px solid var(--coral);
-  border-radius: 8px;
+  background: rgba(4, 40, 52, 0.92);
+  border: 1px solid rgba(46, 196, 182, 0.5);
+  border-left: 4px solid var(--teal);
+  border-radius: 10px;
   padding: 10px 12px;
   font-size: 17px;
   transition: opacity 0.8s;
@@ -263,10 +258,9 @@ body {
   margin-top: 3px;
 }
 
-/* --- Sous-titres du prof (bas de l'écran, gros) --- */
+/* --- Sous-titre du prof : ligne dédiée en bas, gros --- */
 .subtitles {
-  align-self: stretch;
-  max-height: 26vh;
+  max-height: 22vh;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
