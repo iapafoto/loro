@@ -140,6 +140,11 @@ export class LiveConversation {
     await this.relaunch();
   }
 
+  /** Volume de la voix du prof (0..1) — appliqué à chaud, aucune relance. */
+  setVolume(v: number): void {
+    this.player.setVolume(v);
+  }
+
   /** Change le seuil de fin de parole (figé à la connexion) : relance si elle tourne. */
   async setSilenceMs(ms: number): Promise<void> {
     if (ms === this.silenceMs) return;

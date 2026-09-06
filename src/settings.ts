@@ -16,6 +16,12 @@ export interface Settings {
   job: string;
   scenario: ScenarioId;
   subtitles: SubtitleMode;
+  /**
+   * Volume de la voix du prof (0..1), appliqué par un gain maître DANS l'app. Sur
+   * Android, la voix sort par le haut-parleur via un flux que les boutons de volume
+   * du téléphone ne pilotent pas toujours ; ce réglage-là marche quoi qu'il arrive.
+   */
+  volume: number;
 }
 
 const SETTINGS_KEY = 'loro.settings';
@@ -28,6 +34,7 @@ export function defaultSettings(): Settings {
     job: '',
     scenario: 'libre',
     subtitles: 'bi',
+    volume: 1,
   };
 }
 

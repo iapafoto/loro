@@ -237,6 +237,7 @@ if (geminiKey) {
   // (aucune session encore ouverte) : ils ne font que mémoriser la valeur.
   void live.setVoice(settings.voice);
   void live.setSilenceMs(settings.silenceMs);
+  live.setVolume(settings.volume);
 }
 
 // --- Interface ---------------------------------------------------------------
@@ -280,6 +281,7 @@ const app = new App({
       saveSettings(settings);
       if (patch.voice) void live?.setVoice(patch.voice);
       if (patch.silenceMs) void live?.setSilenceMs(patch.silenceMs);
+      if (patch.volume !== undefined) live?.setVolume(patch.volume);
     },
     onProfileChange: (id) => {
       store.setActive(id);

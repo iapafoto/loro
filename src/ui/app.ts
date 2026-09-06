@@ -617,6 +617,23 @@ export class App {
     voiceSel.onchange = () => this.patch({ voice: voiceSel.value });
     this.reglagesBody.append(this.card('Voix du prof', [voiceSel]));
 
+    // Volume — réglage in-app : sur mobile, la voix sort par le haut-parleur via un
+    // flux que les boutons de volume du téléphone ne pilotent pas toujours ; ce
+    // curseur, lui, agit toujours (gain maître, cf. VoicePlayer.setVolume).
+    const volPct = Math.round(s.volume * 100);
+    const vol = el('input', { type: 'range', min: '0', max: '100', step: '5', value: String(volPct), class: 'range' }) as HTMLInputElement;
+    const volVal = el('span', { class: 'range-val', text: `${volPct} %` });
+    vol.oninput = () => {
+      volVal.textContent = `${vol.value} %`;
+      this.patch({ volume: Number(vol.value) / 100 }); // à chaud : on entend le réglage en direct
+    };
+    this.reglagesBody.append(
+      this.card('Volume', [
+        el('p', { class: 'hint', text: 'Niveau de la voix du prof. Réglable ici car sur téléphone les boutons de volume n’agissent pas toujours sur ce son.' }),
+        el('div', { class: 'row' }, [vol, volVal]),
+      ]),
+    );
+
     // Seuil de silence
     const sil = el('input', { type: 'range', min: '300', max: '1500', step: '50', value: String(s.silenceMs), class: 'range' }) as HTMLInputElement;
     const silVal = el('span', { class: 'range-val', text: `${s.silenceMs} ms` });

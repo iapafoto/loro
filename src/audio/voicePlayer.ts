@@ -53,7 +53,9 @@ export interface VoicePlayerCallbacks {
 export class VoicePlayer {
   private ctx: AudioContext | null = null;
   private gain: GainNode | null = null;
-  private tail: AudioNode | null = null; // dernier nœud avant la sortie (gain → limiteur)
+  private master: GainNode | null = null; // volume réglable par l'utilisateur, en bout de chaîne
+  private volume = 1; // 0..1, piloté par le réglage in-app (cf. setVolume)
+  private tail: AudioNode | null = null; // dernier nœud avant la sortie (… → limiteur → master)
   // Enveloppe de la voix EN COURS de lecture, pour la synchro labiale (lip-sync).
   private analyser: AnalyserNode | null = null;
   private levelBuf: Float32Array<ArrayBuffer> = new Float32Array(0);
@@ -72,6 +74,21 @@ export class VoicePlayer {
   /** Décale la hauteur de la voix (1 = naturelle, 1.1–1.3 = plus aiguë/bébé). */
   setPitch(factor: number): void {
     this.pitch = Math.max(0.5, Math.min(2, factor));
+  }
+
+  /**
+   * Volume de sortie 0..1, appliqué par un gain maître EN BOUT DE CHAÎNE (après le
+   * limiteur). C'est le seul réglage de niveau fiable côté mobile : la voix sort par
+   * le haut-parleur via un flux que les boutons de volume du téléphone ne pilotent
+   * pas toujours, alors que ce gain-là agit toujours. Un fondu court évite le clic
+   * d'un changement brusque.
+   */
+  setVolume(v: number): void {
+    this.volume = Math.max(0, Math.min(1, v));
+    if (this.master && this.ctx) {
+      const now = this.ctx.currentTime;
+      this.master.gain.setTargetAtTime(this.volume, now, 0.02);
+    }
   }
 
   /**
@@ -272,6 +289,7 @@ export class VoicePlayer {
     }
     this.ctx = null;
     this.gain = null;
+    this.master = null;
     this.tail = null;
     this.analyser = null;
     this.streamDest = null;
@@ -307,7 +325,18 @@ export class VoicePlayer {
     if (this.ctx) return this.ctx;
     const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!Ctor) return null;
-    this.ctx = new Ctor({ latencyHint: 'interactive' });
+    // Contexte forcé au débit de Gemini (24 kHz). SINON le contexte tourne au débit
+    // natif (souvent 48 kHz) et CHAQUE chunk est rééchantillonné indépendamment :
+    // l'interpolation repart à zéro à chaque buffer, semant une micro-discontinuité
+    // à chaque jointure → un grain/bip « type buffer » pendant la parole que le
+    // fondu d'attaque (anti-clic de début) ne peut pas rattraper. À 24 kHz, les
+    // buffers jouent échantillon pour échantillon : jointures parfaites, plus de bip.
+    try {
+      this.ctx = new Ctor({ latencyHint: 'interactive', sampleRate: OUTPUT_RATE });
+    } catch {
+      // Débit refusé par le navigateur : on retombe sur le natif (rééchantillonné).
+      this.ctx = new Ctor({ latencyHint: 'interactive' });
+    }
 
     this.gain = this.ctx.createGain();
     this.gain.gain.value = MAKEUP_GAIN;
@@ -328,14 +357,21 @@ export class VoicePlayer {
     this.levelBuf = new Float32Array(this.analyser.fftSize);
     this.gain.connect(this.analyser);
     this.analyser.connect(limiter);
-    this.tail = limiter;
+
+    // Gain maître : le volume réglable de l'app, en bout de chaîne (après le
+    // limiteur, donc il atténue le signal déjà maîtrisé, sans réintroduire de
+    // saturation). C'est lui qui remplace des boutons de volume système inopérants.
+    this.master = this.ctx.createGain();
+    this.master.gain.value = this.volume;
+    limiter.connect(this.master);
+    this.tail = this.master;
 
     // Chemin direct (repli, actif par défaut). resume() bascule vers le <audio>
     // element s'il parvient à jouer (haut-parleur mobile au lieu de l'écouteur).
-    limiter.connect(this.ctx.destination);
+    this.master.connect(this.ctx.destination);
     try {
       this.streamDest = this.ctx.createMediaStreamDestination();
-      limiter.connect(this.streamDest);
+      this.master.connect(this.streamDest);
       const el = new Audio();
       el.autoplay = true;
       el.volume = 1;
