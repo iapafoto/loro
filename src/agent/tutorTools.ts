@@ -127,8 +127,9 @@ export const TUTOR_DECLARATIONS: FunctionDeclaration[] = [
   {
     name: 'corrige',
     description:
-      'CARTE DE CORRECTION (visible) + journal. Sers-t’en RÉGULIÈREMENT, dès qu’une tournure '
-      + 'mérite d’être VUE écrite, pas seulement quand une faute se répète. C’est la trace '
+      'CARTE DE CORRECTION (visible) + journal. L’afficher NE COUPE PAS ta parole (c’est une '
+      + 'carte écrite, en parallèle), donc n’hésite pas : sers-t’en RÉGULIÈREMENT, dès qu’une '
+      + 'tournure mérite d’être VUE écrite, pas seulement quand une faute se répète. C’est la trace '
       + 'écrite du cours : un écran resté vide toute la séance = un cours sans corrections. '
       + 'Vise plusieurs cartes par séance. Évite juste de corriger CHAQUE broutille (le reste '
       + 'passe par reformulation naturelle). La carte vient à la fin de ton tour, en plus de '
