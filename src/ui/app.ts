@@ -635,13 +635,13 @@ export class App {
     );
 
     // Seuil de silence
-    const sil = el('input', { type: 'range', min: '300', max: '1500', step: '50', value: String(s.silenceMs), class: 'range' }) as HTMLInputElement;
+    const sil = el('input', { type: 'range', min: '100', max: '1500', step: '50', value: String(s.silenceMs), class: 'range' }) as HTMLInputElement;
     const silVal = el('span', { class: 'range-val', text: `${s.silenceMs} ms` });
     sil.oninput = () => (silVal.textContent = `${sil.value} ms`);
     sil.onchange = () => this.patch({ silenceMs: Number(sil.value) });
     this.reglagesBody.append(
       this.card('Temps de réflexion', [
-        el('p', { class: 'hint', text: 'Silence à attendre avant que le prof réponde. Bas = réponse plus rapide ; haut = il te laisse chercher tes mots. C’est le seul délai réglable — la valeur choisie est appliquée telle quelle.' }),
+        el('p', { class: 'hint', text: 'Silence à attendre avant que le prof réponde. Bas = réponse plus rapide (mais il risque de te couper si tu hésites) ; haut = il te laisse chercher tes mots. C’est le seul délai réglable — la valeur choisie est appliquée telle quelle.' }),
         el('div', { class: 'row' }, [sil, silVal]),
       ]),
     );
