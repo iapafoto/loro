@@ -635,7 +635,7 @@ export class App {
     );
 
     // Seuil de silence
-    const sil = el('input', { type: 'range', min: '100', max: '1500', step: '50', value: String(s.silenceMs), class: 'range' }) as HTMLInputElement;
+    const sil = el('input', { type: 'range', min: '0', max: '1500', step: '50', value: String(s.silenceMs), class: 'range' }) as HTMLInputElement;
     const silVal = el('span', { class: 'range-val', text: `${s.silenceMs} ms` });
     sil.oninput = () => (silVal.textContent = `${sil.value} ms`);
     sil.onchange = () => this.patch({ silenceMs: Number(sil.value) });
