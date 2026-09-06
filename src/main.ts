@@ -216,13 +216,7 @@ if (geminiKey) {
         if (!tutorSpeaking) armResponseWatch();
       }
     },
-    onRoute: (viaElement, detail) => {
-      // DIAGNOSTIC TEMPORAIRE (volume mobile) : montre par où sort la voix — via le
-      // <audio> (flux média, fort) ou en repli sur ctx.destination (flux d'appel,
-      // faible). Affiché à l'écran car la console est illisible sur téléphone.
-      console.info('[loro] route audio :', detail);
-      app.showAlert(`🔊 ${viaElement ? 'HP média' : 'repli appel'} — ${detail}`);
-    },
+    onRoute: (viaElement, detail) => console.info('[loro] route audio :', viaElement ? 'HP' : 'repli', detail),
     onStalled: (reason) => console.warn('[loro] voix débloquée :', reason),
     onResumed: () => console.info('[loro] session reprise (au-delà du plafond ~15 min)'),
     onReady: () => {

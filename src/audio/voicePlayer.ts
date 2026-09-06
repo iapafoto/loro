@@ -15,6 +15,15 @@ const WATCHDOG_MARGIN_MS = 700;
 
 const OFF_HANGOVER_MS = 140; // évite le clignotement parle/écoute entre 2 morceaux, sans trop retarder la reprise du micro
 const MAKEUP_GAIN = 3.0; // le PCM de Gemini n'est pas à pleine échelle → on remonte (limiteur derrière)
+/**
+ * Gain du curseur de volume à fond (volume = 1). Placé AVANT le limiteur : le
+ * monter ne clippe pas, ça POUSSE le signal contre le plafond du limiteur → plus
+ * fort jusqu'à la pleine échelle, sans distorsion. Il faut cette marge parce que
+ * le PCM de Gemini est bas ET que le flux « voix » d'Android (haut-parleur, imposé
+ * par le micro actif) n'est pas piloté par les boutons de volume du téléphone :
+ * ce curseur est le SEUL réglage de niveau, il doit pouvoir aller franchement fort.
+ */
+const MAX_VOLUME_GAIN = 4.0;
 
 /**
  * Anti-clic (les « bips » hérités du player Mochi). Un buffer PCM qui démarre sur
@@ -52,10 +61,10 @@ export interface VoicePlayerCallbacks {
 
 export class VoicePlayer {
   private ctx: AudioContext | null = null;
-  private gain: GainNode | null = null;
-  private master: GainNode | null = null; // volume réglable par l'utilisateur, en bout de chaîne
+  private gain: GainNode | null = null; // compensation FIXE, alimente l'analyseur (lip-sync stable)
+  private volumeGain: GainNode | null = null; // volume utilisateur, AVANT le limiteur → pousse dans le plafond
   private volume = 1; // 0..1, piloté par le réglage in-app (cf. setVolume)
-  private tail: AudioNode | null = null; // dernier nœud avant la sortie (… → limiteur → master)
+  private tail: AudioNode | null = null; // dernier nœud avant la sortie (… → volume → limiteur)
   // Enveloppe de la voix EN COURS de lecture, pour la synchro labiale (lip-sync).
   private analyser: AnalyserNode | null = null;
   private levelBuf: Float32Array<ArrayBuffer> = new Float32Array(0);
@@ -77,17 +86,17 @@ export class VoicePlayer {
   }
 
   /**
-   * Volume de sortie 0..1, appliqué par un gain maître EN BOUT DE CHAÎNE (après le
-   * limiteur). C'est le seul réglage de niveau fiable côté mobile : la voix sort par
-   * le haut-parleur via un flux que les boutons de volume du téléphone ne pilotent
-   * pas toujours, alors que ce gain-là agit toujours. Un fondu court évite le clic
-   * d'un changement brusque.
+   * Volume de sortie 0..1, appliqué AVANT le limiteur (× MAX_VOLUME_GAIN) : le seul
+   * réglage de niveau fiable côté mobile, car la voix sort sur le flux « voix »
+   * d'Android que les boutons du téléphone ne pilotent pas. Monté à fond, il pousse
+   * le signal contre le plafond du limiteur → fort, sans distorsion. Fondu court
+   * pour éviter le clic d'un changement brusque.
    */
   setVolume(v: number): void {
     this.volume = Math.max(0, Math.min(1, v));
-    if (this.master && this.ctx) {
+    if (this.volumeGain && this.ctx) {
       const now = this.ctx.currentTime;
-      this.master.gain.setTargetAtTime(this.volume, now, 0.02);
+      this.volumeGain.gain.setTargetAtTime(this.volume * MAX_VOLUME_GAIN, now, 0.02);
     }
   }
 
@@ -289,7 +298,7 @@ export class VoicePlayer {
     }
     this.ctx = null;
     this.gain = null;
-    this.master = null;
+    this.volumeGain = null;
     this.tail = null;
     this.analyser = null;
     this.streamDest = null;
@@ -348,30 +357,30 @@ export class VoicePlayer {
     limiter.ratio.value = 20;
     limiter.attack.value = 0.003;
     limiter.release.value = 0.1;
-    // Analyseur inséré EN LIGNE (gain → analyseur → limiteur) : ainsi il est
-    // toujours « tiré » par le graphe, quel que soit le routage de sortie (<audio>
-    // ou ctx.destination), et il voit le même signal que celui envoyé au haut-parleur.
+    // Analyseur inséré EN LIGNE, juste après la compensation FIXE (gain → analyseur) :
+    // le lip-sync voit un niveau stable, indépendant du curseur de volume (sinon la
+    // bouche rétrécirait quand on baisse le son). Il est toujours « tiré » par le
+    // graphe, quel que soit le routage de sortie.
     this.analyser = this.ctx.createAnalyser();
     this.analyser.fftSize = 512; // ~10 ms de fenêtre : assez fin pour l'enveloppe
     this.analyser.smoothingTimeConstant = 0; // on lisse via le tau du visage, pas ici
     this.levelBuf = new Float32Array(this.analyser.fftSize);
     this.gain.connect(this.analyser);
-    this.analyser.connect(limiter);
 
-    // Gain maître : le volume réglable de l'app, en bout de chaîne (après le
-    // limiteur, donc il atténue le signal déjà maîtrisé, sans réintroduire de
-    // saturation). C'est lui qui remplace des boutons de volume système inopérants.
-    this.master = this.ctx.createGain();
-    this.master.gain.value = this.volume;
-    limiter.connect(this.master);
-    this.tail = this.master;
+    // Volume utilisateur, AVANT le limiteur : le monter pousse le signal contre le
+    // plafond du limiteur (fort, sans clip) au lieu de simplement l'atténuer.
+    this.volumeGain = this.ctx.createGain();
+    this.volumeGain.gain.value = this.volume * MAX_VOLUME_GAIN;
+    this.analyser.connect(this.volumeGain);
+    this.volumeGain.connect(limiter);
+    this.tail = limiter;
 
     // Chemin direct (repli, actif par défaut). resume() bascule vers le <audio>
     // element s'il parvient à jouer (haut-parleur mobile au lieu de l'écouteur).
-    this.master.connect(this.ctx.destination);
+    limiter.connect(this.ctx.destination);
     try {
       this.streamDest = this.ctx.createMediaStreamDestination();
-      this.master.connect(this.streamDest);
+      limiter.connect(this.streamDest);
       const el = new Audio();
       el.autoplay = true;
       el.volume = 1;
