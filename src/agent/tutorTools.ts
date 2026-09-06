@@ -127,13 +127,12 @@ export const TUTOR_DECLARATIONS: FunctionDeclaration[] = [
   {
     name: 'corrige',
     description:
-      'CARTE DE CORRECTION (visible) + journal. SILENCIEUSE : elle n’interrompt pas la '
-      + 'conversation — sers-t’en RÉGULIÈREMENT, dès qu’une tournure mérite d’être VUE écrite, '
-      + 'pas seulement quand une faute se répète. C’est la trace écrite du cours : un écran '
-      + 'resté vide toute la séance = un cours sans corrections. Vise plusieurs cartes par '
-      + 'séance. Évite juste de corriger CHAQUE broutille (le reste passe par reformulation '
-      + 'naturelle) et de couper : la carte vient à la fin de ton tour, en plus de ta réponse '
-      + 'parlée. Montre la forme fautive, la forme correcte, et pourquoi, en une ligne.',
+      'CARTE DE CORRECTION (visible) + journal. Sers-t’en RÉGULIÈREMENT, dès qu’une tournure '
+      + 'mérite d’être VUE écrite, pas seulement quand une faute se répète. C’est la trace '
+      + 'écrite du cours : un écran resté vide toute la séance = un cours sans corrections. '
+      + 'Vise plusieurs cartes par séance. Évite juste de corriger CHAQUE broutille (le reste '
+      + 'passe par reformulation naturelle). La carte vient à la fin de ton tour, en plus de '
+      + 'ta réponse parlée. Montre la forme fautive, la forme correcte, et pourquoi, en une ligne.',
     parameters: {
       type: 'object',
       properties: {
