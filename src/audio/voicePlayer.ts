@@ -125,7 +125,7 @@ export class VoicePlayer {
           .then(() => {
             this.tail?.disconnect(ctx.destination); // évite le double son
             this.routedToElement = true;
-            this.cb.onRoute?.(true, 'sortie via <audio> (flux média)');
+            this.cb.onRoute?.(true, `sortie via <audio> (flux média) @ ${Math.round(ctx.sampleRate)} Hz`);
           })
           .catch((e: Error) => {
             // Repli sur ctx.destination. ⚠️ CE REPLI EST SILENCIEUX ET C'EST SON
@@ -134,7 +134,7 @@ export class VoicePlayer {
             // s'affiche, et on cherche du côté du micro ou du modèle. D'où ce
             // rapport : c'est la seule façon de savoir, depuis le téléphone, quel
             // chemin a gagné.
-            this.cb.onRoute?.(false, `<audio> refusé (${e.name}) — repli AudioContext`);
+            this.cb.onRoute?.(false, `<audio> refusé (${e.name}) — repli AudioContext @ ${Math.round(ctx.sampleRate)} Hz`);
           });
       } else {
         this.cb.onRoute?.(false, 'play() sans promesse — repli AudioContext');
